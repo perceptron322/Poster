@@ -323,7 +323,7 @@
 
 ## 8. Концептуальная ER-модель
 
-![[ER-модель.png]]
+<img width="1536" height="1024" alt="ER-модель" src="https://github.com/user-attachments/assets/c7d6ca69-4d90-4991-8ab2-b1b604241d42" />
 
 Основные сущности:
 
