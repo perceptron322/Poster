@@ -38,7 +38,8 @@
             "styles": [
               "node_modules/@taiga-ui/styles/taiga-ui-theme.less",
               "node_modules/@taiga-ui/styles/taiga-ui-fonts.less",
-              "src/styles.scss"
+              "src/styles.scss",
+              "src/app/styles/main.scss"
             ]
           },
           "configurations": {
