@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16
+    container_name: poster-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-poster}
+      POSTGRES_USER: ${POSTGRES_USER:-poster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:

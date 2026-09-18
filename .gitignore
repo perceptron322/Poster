@@ -1,0 +1,20 @@
+.env
+*.local
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Логи
+*.log
