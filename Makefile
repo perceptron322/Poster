@@ -52,3 +52,31 @@ run:
 
 build:
 	go build -o bin/api cmd/api/main.go
+
+PSQL = docker compose exec -T db psql -U poster -d poster -v ON_ERROR_STOP=1
+
+seed:
+	$(PSQL) < scripts/seed.sql
+
+scenarios:
+	@for f in scripts/scenarios/*.sql; do \
+		echo "== $$f =="; \
+		$(PSQL) < "$$f" || exit 1; \
+	done
+
+negatives:
+	@fail=0; \
+	for f in scripts/negative/*.sql; do \
+		echo "== $$f =="; \
+		if $(PSQL) -1 -f "/dev/stdin" < "$$f" >/dev/null 2>&1; then \
+			echo "  ❌ ПРОВАЛ: не упало"; fail=1; \
+		else \
+			echo "  ✅ OK: ошибка получена"; \
+		fi; \
+	done; \
+	exit $$fail
+
+test-all: seed scenarios negatives
+	@echo "✅ Все сценарии и негативные тесты прошли"
+
+.PHONY: seed scenarios negatives test-all
