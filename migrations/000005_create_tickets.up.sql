@@ -1,9 +1,11 @@
 CREATE TABLE tickets (
-    ticket_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ticket_id  INTEGER GENERATED ALWAYS AS IDENTITY,
     price      NUMERIC(10,2) NOT NULL,
     status     VARCHAR(20)   NOT NULL DEFAULT 'valid',
 
     order_id   INTEGER NOT NULL,
+
+    CONSTRAINT pk_tickets PRIMARY KEY (ticket_id),
 
     CONSTRAINT fk_tickets_order
         FOREIGN KEY (order_id) REFERENCES orders(order_id)

@@ -1,5 +1,5 @@
 CREATE TABLE events (
-    event_id      INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    event_id      INTEGER GENERATED ALWAYS AS IDENTITY,
     title         VARCHAR(300)  NOT NULL,
     description   TEXT,
     cover         VARCHAR(500),
@@ -11,6 +11,8 @@ CREATE TABLE events (
 
     user_id       INTEGER NOT NULL,
     location_id   INTEGER NOT NULL,
+
+    CONSTRAINT pk_events PRIMARY KEY (event_id),
 
     CONSTRAINT fk_events_user
         FOREIGN KEY (user_id) REFERENCES users(user_id)

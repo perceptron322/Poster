@@ -1,9 +1,10 @@
 CREATE TABLE users (
-    user_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id  INTEGER GENERATED ALWAYS AS IDENTITY,
     name     VARCHAR(200) NOT NULL,
     email    VARCHAR(255) NOT NULL,
     role     VARCHAR(20)  NOT NULL DEFAULT 'customer',
 
+    CONSTRAINT pk_users       PRIMARY KEY (user_id),
     CONSTRAINT uq_users_email UNIQUE (email),
     CONSTRAINT chk_users_role
         CHECK (role IN ('customer', 'organizer', 'admin'))

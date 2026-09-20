@@ -1,11 +1,13 @@
 CREATE TABLE orders (
-    order_id     INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id     INTEGER GENERATED ALWAYS AS IDENTITY,
     created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     status       VARCHAR(20)   NOT NULL DEFAULT 'pending',
     total_price  NUMERIC(10,2) NOT NULL DEFAULT 0,
 
     user_id      INTEGER NOT NULL,
     event_id     INTEGER NOT NULL,
+
+    CONSTRAINT pk_orders PRIMARY KEY (order_id),
 
     CONSTRAINT fk_orders_user
         FOREIGN KEY (user_id) REFERENCES users(user_id)
