@@ -1,5 +1,16 @@
 .PHONY: help db-up db-down db-logs db-shell migrate migrate-down migrate-create migrate-version reset run build
 
+-include .env.example
+export
+
+POSTGRES_HOST     ?= localhost
+POSTGRES_PORT     ?= 5433
+POSTGRES_DB       ?= poster
+POSTGRES_USER     ?= poster
+POSTGRES_PASSWORD ?= secret
+
+DB_URL ?= $(if $(DATABASE_URL),$(DATABASE_URL),postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable)
+
 help:
 	@echo "Доступные команды:"
 	@echo "  make db-up            — поднять PostgreSQL в Docker"
@@ -13,8 +24,7 @@ help:
 	@echo "  make reset            — сбросить БД и накатить миграции заново"
 	@echo "  make run              — запустить приложение"
 	@echo "  make build            — собрать бинарник"
-
-DB_URL = postgres://poster:secret@localhost:5433/poster?sslmode=disable
+	@echo "  make print-db-url     — показать текущий DB_URL"
 
 db-up:
 	docker compose up -d db
@@ -26,7 +36,7 @@ db-logs:
 	docker compose logs -f db
 
 db-shell:
-	docker compose exec db psql -U poster -d poster
+	docker compose exec db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
 migrate:
 	migrate -path migrations -database "$(DB_URL)" up
@@ -45,7 +55,7 @@ reset:
 	docker compose down -v
 	docker compose up -d db
 	@sleep 3
-	make migrate
+	$(MAKE) migrate
 
 run:
 	go run cmd/api/main.go
