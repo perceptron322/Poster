@@ -10,8 +10,14 @@ CREATE TABLE location_bookings (
     CONSTRAINT pk_location_bookings   PRIMARY KEY (booking_id),
     CONSTRAINT fk_bookings_location   FOREIGN KEY (location_id)
         REFERENCES locations(location_id) ON DELETE RESTRICT,
-    CONSTRAINT fk_bookings_event      FOREIGN KEY (event_id)
-        REFERENCES events(event_id) ON DELETE CASCADE,
+
+    -- Составной FK: бронь не может указывать на площадку, отличную от
+    -- events.location_id. ON UPDATE CASCADE переносит бронь вслед за
+    -- переносом мероприятия на другую площадку.
+    CONSTRAINT fk_bookings_event      FOREIGN KEY (event_id, location_id)
+        REFERENCES events(event_id, location_id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+
     CONSTRAINT uq_bookings_event      UNIQUE (event_id),
     CONSTRAINT chk_bookings_period    CHECK (NOT isempty(period)),
     CONSTRAINT ex_bookings_no_overlap EXCLUDE USING GIST (

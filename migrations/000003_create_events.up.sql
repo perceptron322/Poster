@@ -14,6 +14,10 @@ CREATE TABLE events (
 
     CONSTRAINT pk_events PRIMARY KEY (event_id),
 
+    -- Опорный ключ для составного FK из location_bookings:
+    -- гарантирует, что бронь ссылается на ту же площадку, что и мероприятие.
+    CONSTRAINT uq_events_id_location UNIQUE (event_id, location_id),
+
     CONSTRAINT fk_events_user
         FOREIGN KEY (user_id) REFERENCES users(user_id)
         ON DELETE RESTRICT,
