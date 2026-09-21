@@ -7,8 +7,8 @@ CREATE TABLE users (
     CONSTRAINT pk_users       PRIMARY KEY (user_id),
     CONSTRAINT uq_users_email UNIQUE (email),
     CONSTRAINT chk_users_role
-        CHECK (role IN ('customer', 'organizer', 'admin'))
+        CHECK (role IN ('guest', 'customer', 'organizer'))
 );
 
 COMMENT ON TABLE  users      IS 'Пользователи системы';
-COMMENT ON COLUMN users.role IS 'Роль: customer / organizer / admin';
+COMMENT ON COLUMN users.role IS 'Роль: guest / customer / organizer';
