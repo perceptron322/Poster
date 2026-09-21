@@ -1,4 +1,3 @@
-DROP INDEX IF EXISTS idx_locations_booked_time;
 DROP INDEX IF EXISTS idx_orders_user_status;
 DROP INDEX IF EXISTS idx_orders_status;
 DROP INDEX IF EXISTS idx_events_status;

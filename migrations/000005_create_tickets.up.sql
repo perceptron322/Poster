@@ -11,9 +11,9 @@ CREATE TABLE tickets (
         FOREIGN KEY (order_id) REFERENCES orders(order_id)
         ON DELETE CASCADE,
 
-    CONSTRAINT chk_tickets_price  CHECK (price >= 0),
+    CONSTRAINT chk_tickets_price  CHECK (price > 0),
     CONSTRAINT chk_tickets_status
-        CHECK (status IN ('valid', 'used', 'cancelled'))
+        CHECK (status IN ('valid', 'used', 'returned', 'cancelled'))
 );
 
 COMMENT ON COLUMN tickets.order_id IS 'Заказ, к которому относится билет';

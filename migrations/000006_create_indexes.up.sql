@@ -9,6 +9,3 @@ CREATE INDEX idx_events_status       ON events(status);
 CREATE INDEX idx_orders_status       ON orders(status);
 
 CREATE INDEX idx_orders_user_status  ON orders(user_id, status);
-
-CREATE INDEX idx_locations_booked_time
-    ON locations USING GIST (booked_time);

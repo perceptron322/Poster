@@ -1,1 +1,0 @@
-ALTER TABLE locations DROP COLUMN IF EXISTS booked_time;
