@@ -86,7 +86,11 @@ negatives:
 	done; \
 	exit $$fail
 
-test-all: seed scenarios negatives
+property-tests:
+	@echo "== Property-based tests =="
+	@$(PSQL) < scripts/property/schema_constraints.sql
+	@echo "✅ Все property-based тесты прошли"
+test-all: seed scenarios negatives property-tests
 	@echo "✅ Все сценарии и негативные тесты прошли"
 
-.PHONY: seed scenarios negatives test-all
+.PHONY: seed scenarios negatives property-tests test-all
