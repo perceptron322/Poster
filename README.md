@@ -516,7 +516,7 @@
 ---
 ## Логическая модель PostgreSQL
 
-<img width="1536" height="1024" alt="er3" src="https://github.com/user-attachments/assets/4467eeb0-e6f1-4e98-83c9-e57560fb7d5d" />
+<img width="1536" height="1024" alt="мегаитоговая логическая модель" src="https://github.com/user-attachments/assets/5cd69a49-ab47-4203-a4df-4713fabca020" />
 
 
 ### Основные сущности:
