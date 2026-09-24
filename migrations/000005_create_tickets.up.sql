@@ -1,19 +1,9 @@
 CREATE TABLE tickets (
-    ticket_id  INTEGER GENERATED ALWAYS AS IDENTITY,
-    price      NUMERIC(10,2) NOT NULL,
-    status     VARCHAR(20)   NOT NULL DEFAULT 'valid',
+    ticket_id SERIAL PRIMARY KEY,
+    price DECIMAL(10,2) NOT NULL CHECK (price > 0),
+    status VARCHAR(20) NOT NULL,
 
-    order_id   INTEGER NOT NULL,
+    order_id INT NOT NULL,
 
-    CONSTRAINT pk_tickets PRIMARY KEY (ticket_id),
-
-    CONSTRAINT fk_tickets_order
-        FOREIGN KEY (order_id) REFERENCES orders(order_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT chk_tickets_price  CHECK (price > 0),
-    CONSTRAINT chk_tickets_status
-        CHECK (status IN ('valid', 'used', 'returned', 'cancelled'))
+    FOREIGN KEY (order_id) REFERENCES orders(order_id)
 );
-
-COMMENT ON COLUMN tickets.order_id IS 'Заказ, к которому относится билет';

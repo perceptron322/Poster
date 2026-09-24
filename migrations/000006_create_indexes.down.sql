@@ -1,9 +1,0 @@
-DROP INDEX IF EXISTS idx_orders_user_status;
-DROP INDEX IF EXISTS idx_orders_status;
-DROP INDEX IF EXISTS idx_events_status;
-DROP INDEX IF EXISTS idx_events_datetime;
-DROP INDEX IF EXISTS idx_tickets_order_id;
-DROP INDEX IF EXISTS idx_orders_event_id;
-DROP INDEX IF EXISTS idx_orders_user_id;
-DROP INDEX IF EXISTS idx_events_location_id;
-DROP INDEX IF EXISTS idx_events_user_id;

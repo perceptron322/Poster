@@ -1,14 +1,6 @@
 CREATE TABLE users (
-    user_id  INTEGER GENERATED ALWAYS AS IDENTITY,
-    name     VARCHAR(200) NOT NULL,
-    email    VARCHAR(255) NOT NULL,
-    role     VARCHAR(20)  NOT NULL DEFAULT 'guest',
-
-    CONSTRAINT pk_users       PRIMARY KEY (user_id),
-    CONSTRAINT uq_users_email UNIQUE (email),
-    CONSTRAINT chk_users_role
-        CHECK (role IN ('guest', 'customer', 'organizer'))
+    user_id SERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    role VARCHAR(20) NOT NULL
 );
-
-COMMENT ON TABLE  users      IS 'Пользователи системы';
-COMMENT ON COLUMN users.role IS 'Роль: guest / customer / organizer';
