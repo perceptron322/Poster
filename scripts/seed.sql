@@ -15,7 +15,7 @@ VALUES
 INSERT INTO locations (location_id, name, address, capacity)
 OVERRIDING SYSTEM VALUE
 VALUES
-  (1, 'КЗ «Октябрь»',    'Москва, Ленина 1',  100),
+  (1, 'КЗ «Октябрь»',     'Москва, Ленина 1', 100),
   (2, 'Лекторий «Наука»', 'СПб, Невский 10',   50);
 
 -- ---------- events ----------
@@ -29,13 +29,17 @@ VALUES
       '2026-11-05 13:00+03', '01:30', 'lecture',  500.00, 'published', 1, 2);
 
 -- ---------- location_bookings ----------
-INSERT INTO location_bookings (location_id, event_id, period) VALUES
-  (1, 1, tstzrange('2026-11-01 19:00+03', '2026-11-01 21:00+03', '[)')),
-  (2, 2, tstzrange('2026-11-05 13:00+03', '2026-11-05 14:30+03', '[)'));
+-- В миграции 000006 — две колонки start_time / end_time (не period).
+INSERT INTO location_bookings (location_id, event_id, start_time, end_time)
+VALUES
+  (1, 1, '2026-11-01 19:00+03', '2026-11-01 21:00+03'),
+  (2, 2, '2026-11-05 13:00+03', '2026-11-05 14:30+03');
 
--- Синхронизируем sequence, чтобы IDENTITY не конфликтовал с ручными id
-SELECT setval(pg_get_serial_sequence('users','user_id'),     (SELECT MAX(user_id)     FROM users));
-SELECT setval(pg_get_serial_sequence('locations','location_id'), (SELECT MAX(location_id) FROM locations));
-SELECT setval(pg_get_serial_sequence('events','event_id'),   (SELECT MAX(event_id)    FROM events));
+-- ---------- Синхронизация sequence ----------
+-- После ручных id вставляем setval, иначе следующий автоинкремент
+-- выдаст уже занятый id и упадёт на UNIQUE.
+SELECT setval(pg_get_serial_sequence('users',     'user_id'),     (SELECT MAX(user_id)     FROM users));
+SELECT setval(pg_get_serial_sequence('locations', 'location_id'), (SELECT MAX(location_id) FROM locations));
+SELECT setval(pg_get_serial_sequence('events',    'event_id'),    (SELECT MAX(event_id)    FROM events));
 
 COMMIT;
