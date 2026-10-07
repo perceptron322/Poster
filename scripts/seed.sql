@@ -24,13 +24,13 @@ INSERT INTO events (event_id, title, description, cover, datetime, duration,
 OVERRIDING SYSTEM VALUE
 VALUES
   (1, 'Концерт «Осень»', 'Живая музыка', 'http://img/1.jpg',
-      '2026-10-01 19:00+03', '02:00', 'concert', 1500.00, 'published', 1, 1),
+      '2026-11-01 19:00+03', '02:00', 'concert', 1500.00, 'published', 1, 1),
   (2, 'Лекция по Go',    'Про горутины', 'http://img/2.jpg',
       '2026-11-05 13:00+03', '01:30', 'lecture',  500.00, 'published', 1, 2);
 
 -- ---------- location_bookings ----------
 INSERT INTO location_bookings (location_id, event_id, period) VALUES
-  (1, 1, tstzrange('2026-10-01 19:00+03', '2026-10-01 21:00+03', '[)')),
+  (1, 1, tstzrange('2026-11-01 19:00+03', '2026-11-01 21:00+03', '[)')),
   (2, 2, tstzrange('2026-11-05 13:00+03', '2026-11-05 14:30+03', '[)'));
 
 -- Синхронизируем sequence, чтобы IDENTITY не конфликтовал с ручными id

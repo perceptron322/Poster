@@ -2,6 +2,10 @@ services:
   db:
     image: postgres:16
     container_name: poster-db
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-poster}
       POSTGRES_USER: ${POSTGRES_USER:-poster}

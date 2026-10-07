@@ -90,6 +90,18 @@ property-tests:
 	@echo "== Property-based tests =="
 	@$(PSQL) < scripts/property/schema_constraints.sql
 	@echo "✅ Все property-based тесты прошли"
+
+pgstat-reset:
+	@$(PSQL) < scripts/performance/reset_stats.sql
+
+pgstat-report:
+	@$(PSQL) < scripts/performance/report.sql
+
+pgstat-report-save:
+	@mkdir -p docs/performance
+	@$(PSQL) < scripts/performance/report.sql > docs/performance/pgstat-report.txt
+	@echo "Отчёт сохранён: docs/performance/pgstat-report.txt"
+
 test-all: seed scenarios negatives property-tests
 	@echo "✅ Все сценарии и негативные тесты прошли"
 
