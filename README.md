@@ -779,7 +779,7 @@ make measure        # показать объёмы
 
 make clean load     # ~4.1 млн tickets, ~8 минут
 make measure
-
+```
 ## Проверка
 
 PG_DSN="postgres://poster:secret@localhost:5433/poster?sslmode=disable"
@@ -854,11 +854,11 @@ bucket_days_before: 15467 vs 7195/7092 — большинство заказов
 
 **Состояние до:**
 
-<img src="docs/screenshots/before_transaction.png" alt="До транзакции" width="800">
+<img src="docs/screenshots/before_transaction.png" alt="До транзакции" width="400">
 
 **После:**
 
-<img src="docs/screenshots/after_transaction.png" alt="После транзакции" width="800">
+<img src="docs/screenshots/after_transaction.png" alt="После транзакции" width="400">
 
 **Что делает транзакция:**
 
