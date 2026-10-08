@@ -104,7 +104,7 @@
 - возврат невозможен. Система возвращает ошибку и не сохраняет изменения, если: мероприятие уже началось; билет уже возвращён; билет уже использован.
 - При сбое операции пользователю отобразиться сообщение об ошибке запроса, изменений не будет.
 
-**Результат:** билеты удаляются из списка билетов заказа и становятся недоступными для использования.
+**Результат:** возвращённые билеты получают статус «Возвращён» и становятся недоступными для использования.
 
 ### Сценарий 4. Редактирование мероприятия
 
@@ -216,7 +216,7 @@
 8. Нельзя приобрести билеты, если свободных билетов нет.
 9. Нельзя приобрести билет на завершённое или отменённое мероприятие.
 10. Количество доступных билетов уменьшается на количество билетов, приобретённых в заказе.
-11. При возврате билет удаляется из списка билетов заказа, к которому он принадлежит.
+11. При возврате билет переводится в статус «Возвращён» и сохраняется в заказе.
 12. При возврате количество проданных билетов мероприятия уменьшается на количество возвращённых билетов.
 13. Возврат билетов возможен только до начала мероприятия.
 14. В личном кабинете покупателя отображаются его заказы.
@@ -565,7 +565,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| user_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| user_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
 | name | VARCHAR(200) | NOT NULL | Имя пользователя |
 | email | VARCHAR(255) | NOT NULL, UNIQUE (uq_users_email) | Email; уникален в системе |
 | role | VARCHAR(20) | NOT NULL, DEFAULT 'guest', CHECK (chk_users_role) | Роль: guest / customer / organizer |
@@ -581,7 +581,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| location_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| location_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
 | name | VARCHAR(200) | NOT NULL | Название площадки |
 | address | VARCHAR(500) | NOT NULL | Адрес площадки |
 | capacity | INTEGER | NOT NULL, CHECK (chk_locations_capacity) | Количество мест, > 0 |
@@ -599,7 +599,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| event_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| event_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
 | title | VARCHAR(300) | NOT NULL | Название мероприятия |
 | description | TEXT | — | Описание |
 | cover | VARCHAR(500) | — | URL обложки |
@@ -626,7 +626,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| order_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| order_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Дата оформления |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK (chk_orders_status) | pending / paid / cancelled / refunded |
 | total_price | NUMERIC(10,2) | NOT NULL, DEFAULT 0, CHECK (chk_orders_total) | Стоимость заказа, >= 0 |
@@ -646,7 +646,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| ticket_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| ticket_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
 | price | NUMERIC(10,2) | NOT NULL, CHECK (chk_tickets_price) | Цена на момент покупки, > 0 |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'valid', CHECK (chk_tickets_status) | valid / used / returned / cancelled |
 | order_id | INTEGER | NOT NULL, FK → orders(order_id) ON DELETE CASCADE | Заказ, к которому относится билет |
@@ -662,18 +662,17 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| booking_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| booking_id | INTEGER | PK, SERIAL| Суррогатный первичный ключ |
 | location_id | INTEGER | NOT NULL, FK → locations(location_id) ON DELETE RESTRICT | Занятая площадка |
-| event_id | INTEGER | NOT NULL, UNIQUE (uq_bookings_event) | Мероприятие, занявшее площадку; не более одной брони на мероприятие |
-| period | TSTZRANGE | NOT NULL, CHECK (chk_bookings_period) — непустой | Интервал занятости |
+| event_id | INTEGER | NOT NULL, UNIQUE | Мероприятие, занявшее площадку; не более одной брони на мероприятие |
+| start_time | TIMESTAMPTZ | NOT NULL | Начало бронирования |
+| end_time | TIMESTAMPTZ | NOT NULL, CHECK (end_time > start_time) | Конец бронирования |
 
-Ограничения уровня таблицы:
+Ограничения:
 
-- `fk_bookings_event` — составной FK `(event_id, location_id) → events(event_id, location_id)` ON DELETE CASCADE ON UPDATE CASCADE. Не даёт забронировать площадку, отличную от `events.location_id`; при переносе мероприятия на другую площадку бронь переезжает автоматически.
-- `ex_bookings_no_overlap` — `EXCLUDE USING GIST (location_id WITH =, period WITH &&)`. Две брони одной площадки не могут пересекаться по времени. Требует расширения `btree_gist`.
-- `idx_bookings_location` — индекс по `location_id` для выборок «мероприятия площадки».
-
-Денормализация: `period` дублирует `events.datetime + events.duration`. Вычисляемой колонкой это не выражается — `timestamptz + interval` является STABLE, а не IMMUTABLE, поэтому ни `GENERATED ALWAYS AS`, ни `EXCLUDE` по выражению неприменимы. Синхронизацию при изменении `datetime` или `duration` обеспечивает слой приложения (как и для `orders.total_price`).
+- составной FK `(event_id, location_id) → events(event_id, location_id)` не позволяет забронировать площадку, отличную от указанной у мероприятия;
+- `UNIQUE (event_id)` гарантирует не более одной брони для одного мероприятия;
+- `CHECK (end_time > start_time)` запрещает некорректный интервал бронирования.
 
 Связанные сценарии: S1 (выбор площадки и времени), S4, S7, S8.
 Владелец данных: команда мероприятий.

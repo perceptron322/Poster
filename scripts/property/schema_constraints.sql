@@ -1,6 +1,6 @@
--- Генеративные проверки ограничений схемы.
--- Скрипт создаёт тестовые данные, проверяет свойства в циклах
--- и в конце полностью откатывает транзакцию.
+-- Генеративные проверки ограничений текущей PostgreSQL-схемы.
+-- Для каждого свойства проверяется множество недопустимых значений.
+-- Все тестовые данные откатываются в конце транзакции.
 
 BEGIN;
 
@@ -10,15 +10,11 @@ DECLARE
     v_customer_id  INTEGER;
     v_location_id  INTEGER;
     v_event_id     INTEGER;
-    v_event_2_id   INTEGER;
     v_order_id     INTEGER;
-    v_past_event_rejected BOOLEAN;
-    v_test_start   TIMESTAMPTZ := now() + INTERVAL '7 days';
     i              INTEGER;
 BEGIN
-
     ----------------------------------------------------------------------
-    -- Базовые допустимые данные
+    -- Базовые корректные данные
     ----------------------------------------------------------------------
 
     INSERT INTO users (name, email, role)
@@ -57,9 +53,9 @@ BEGIN
     )
     VALUES (
         'Property Test Event',
-        v_test_start,
+        now() + INTERVAL '7 days',
         INTERVAL '2 hours',
-        'test',
+        'other',
         100.00,
         'published',
         v_organizer_id,
@@ -67,56 +63,51 @@ BEGIN
     )
     RETURNING event_id INTO v_event_id;
 
-
-    ----------------------------------------------------------------------
-    -- Создаём корректный заказ.
-    -- Он нужен для проверки CHECK ограничения цены билета.
-    ----------------------------------------------------------------------
-
     INSERT INTO orders (
         user_id,
-        event_id
+        event_id,
+        status,
+        total_price
     )
     VALUES (
         v_customer_id,
-        v_event_id
+        v_event_id,
+        'paid',
+        100.00
     )
     RETURNING order_id INTO v_order_id;
 
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- вместимость площадки всегда должна быть положительной.
+    -- 1. Вместимость площадки должна быть положительной
     ----------------------------------------------------------------------
 
-  FOR i IN 1..30 LOOP
-    BEGIN
-        INSERT INTO locations (
-            name,
-            address,
-            capacity
-        )
-        VALUES (
-            'Invalid capacity ' || i,
-            'Test address',
-            -i
-        );
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO locations (
+                name,
+                address,
+                capacity
+            )
+            VALUES (
+                'Invalid capacity ' || i,
+                'Test address',
+                -i
+            );
 
-        RAISE EXCEPTION
-            'capacity=%: expected CHECK constraint violation, but INSERT succeeded',
-            -i;
+            RAISE EXCEPTION
+                'capacity=%: expected CHECK violation',
+                -i;
 
-    EXCEPTION
-        WHEN check_violation THEN
-            NULL;
-    END;
-END LOOP;
-
+        EXCEPTION
+            WHEN check_violation THEN
+                NULL;
+        END;
+    END LOOP;
 
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- роль пользователя может быть только из заданного набора.
+    -- 2. Роль пользователя должна быть из разрешённого набора
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -133,7 +124,7 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'role=invalid_role_%: expected CHECK constraint violation, but INSERT succeeded',
+                'role=invalid_role_%: expected CHECK violation',
                 i;
 
         EXCEPTION
@@ -144,8 +135,7 @@ END LOOP;
 
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- email должен быть уникальным.
+    -- 3. Email пользователя должен быть уникальным
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -162,7 +152,7 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'duplicate email: expected UNIQUE constraint violation, but INSERT succeeded';
+                'duplicate email: expected UNIQUE violation';
 
         EXCEPTION
             WHEN unique_violation THEN
@@ -172,8 +162,45 @@ END LOOP;
 
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- цена мероприятия должна быть положительной.
+    -- 4. Тип мероприятия должен быть из разрешённого набора
+    ----------------------------------------------------------------------
+
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO events (
+                title,
+                datetime,
+                duration,
+                type,
+                ticket_price,
+                status,
+                user_id,
+                location_id
+            )
+            VALUES (
+                'Invalid type event ' || i,
+                now() + (i || ' days')::INTERVAL,
+                INTERVAL '1 hour',
+                'invalid_type_' || i,
+                100.00,
+                'published',
+                v_organizer_id,
+                v_location_id
+            );
+
+            RAISE EXCEPTION
+                'type=invalid_type_%: expected CHECK violation',
+                i;
+
+        EXCEPTION
+            WHEN check_violation THEN
+                NULL;
+        END;
+    END LOOP;
+
+
+    ----------------------------------------------------------------------
+    -- 5. Цена мероприятия должна быть положительной
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -190,9 +217,9 @@ END LOOP;
             )
             VALUES (
                 'Invalid price event ' || i,
-                v_test_start + (i || ' days')::INTERVAL,
+                now() + (i || ' days')::INTERVAL,
                 INTERVAL '1 hour',
-                'test',
+                'other',
                 -i,
                 'published',
                 v_organizer_id,
@@ -200,18 +227,18 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'ticket_price=%: expected CHECK constraint violation, but INSERT succeeded',
+                'ticket_price=%: expected CHECK violation',
                 -i;
 
         EXCEPTION
             WHEN check_violation THEN
                 NULL;
         END;
+    END LOOP;
 
-        
+
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- длительность мероприятия должна быть положительной.
+    -- 6. Длительность мероприятия должна быть положительной
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -228,9 +255,9 @@ END LOOP;
             )
             VALUES (
                 'Invalid duration event ' || i,
-                v_test_start + (i || ' days')::INTERVAL,
+                now() + (i || ' days')::INTERVAL,
                 -i * INTERVAL '1 minute',
-                'test',
+                'other',
                 100.00,
                 'published',
                 v_organizer_id,
@@ -238,7 +265,7 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'duration=%: expected CHECK constraint violation, but INSERT succeeded',
+                'duration=%: expected CHECK violation',
                 -i;
 
         EXCEPTION
@@ -248,10 +275,8 @@ END LOOP;
     END LOOP;
 
 
-
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- статус мероприятия может быть только из разрешённого набора.
+    -- 7. Статус мероприятия должен быть из разрешённого набора
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -268,9 +293,9 @@ END LOOP;
             )
             VALUES (
                 'Invalid status event ' || i,
-                v_test_start + (i || ' days')::INTERVAL,
+                now() + (i || ' days')::INTERVAL,
                 INTERVAL '1 hour',
-                'test',
+                'other',
                 100.00,
                 'invalid_status_' || i,
                 v_organizer_id,
@@ -278,7 +303,7 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'status=invalid_status_%: expected CHECK constraint violation, but INSERT succeeded',
+                'status=invalid_status_%: expected CHECK violation',
                 i;
 
         EXCEPTION
@@ -288,10 +313,96 @@ END LOOP;
     END LOOP;
 
 
+    ----------------------------------------------------------------------
+    -- 8. Статус заказа должен быть из разрешённого набора
+    ----------------------------------------------------------------------
+
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO orders (
+                user_id,
+                event_id,
+                status,
+                total_price
+            )
+            VALUES (
+                v_customer_id,
+                v_event_id,
+                'invalid_status_' || i,
+                100.00
+            );
+
+            RAISE EXCEPTION
+                'order status=invalid_status_%: expected CHECK violation',
+                i;
+
+        EXCEPTION
+            WHEN check_violation THEN
+                NULL;
+        END;
+    END LOOP;
+
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- статус билета может быть только из разрешённого набора.
+    -- 9. Общая стоимость заказа не может быть отрицательной
+    ----------------------------------------------------------------------
+
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO orders (
+                user_id,
+                event_id,
+                status,
+                total_price
+            )
+            VALUES (
+                v_customer_id,
+                v_event_id,
+                'pending',
+                -i
+            );
+
+            RAISE EXCEPTION
+                'total_price=%: expected CHECK violation',
+                -i;
+
+        EXCEPTION
+            WHEN check_violation THEN
+                NULL;
+        END;
+    END LOOP;
+
+
+    ----------------------------------------------------------------------
+    -- 10. Цена билета должна быть положительной
+    ----------------------------------------------------------------------
+
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO tickets (
+                price,
+                status,
+                order_id
+            )
+            VALUES (
+                -i,
+                'valid',
+                v_order_id
+            );
+
+            RAISE EXCEPTION
+                'ticket price=%: expected CHECK violation',
+                -i;
+
+        EXCEPTION
+            WHEN check_violation THEN
+                NULL;
+        END;
+    END LOOP;
+
+
+    ----------------------------------------------------------------------
+    -- 11. Статус билета должен быть из разрешённого набора
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -308,7 +419,7 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'ticket status=invalid_status_%: expected CHECK constraint violation, but INSERT succeeded',
+                'ticket status=invalid_status_%: expected CHECK violation',
                 i;
 
         EXCEPTION
@@ -317,80 +428,9 @@ END LOOP;
         END;
     END LOOP;
 
-        
-        
-    ------------------------------------------------------------------
-    -- Свойство:
-    -- цена билета должна быть положительной.
-    --
-    -- Используем существующий order_id, чтобы проверять именно
-    -- CHECK ограничения цены, а не FOREIGN KEY.
-    ------------------------------------------------------------------
-
-        BEGIN
-            INSERT INTO tickets (
-                price,
-                status,
-                order_id
-            )
-            VALUES (
-                -i,
-                'valid',
-                v_order_id
-            );
-
-            RAISE EXCEPTION
-                'ticket price=%: expected CHECK constraint violation, but INSERT succeeded',
-                -i;
-
-        EXCEPTION
-            WHEN check_violation THEN
-                NULL;
-        END;
-    END LOOP;
-
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- мероприятие нельзя создать в прошлом.
-    ----------------------------------------------------------------------
-
-    FOR i IN 1..10 LOOP
-        BEGIN
-            INSERT INTO events (
-                title,
-                datetime,
-                duration,
-                type,
-                ticket_price,
-                status,
-                user_id,
-                location_id
-            )
-            VALUES (
-                'Past event ' || i,
-                now() - (i || ' days')::INTERVAL,
-                INTERVAL '1 hour',
-                'test',
-                100.00,
-                'published',
-                v_organizer_id,
-                v_location_id
-            );
-
-            RAISE EXCEPTION
-                'past datetime: expected trigger exception, but INSERT succeeded';
-
-        EXCEPTION
-            WHEN raise_exception THEN
-                NULL;
-        END;
-    END LOOP;
-
-
-    ----------------------------------------------------------------------
-    -- Свойство:
-    -- билет не может ссылаться на отсутствующий заказ.
+    -- 12. Билет не может ссылаться на отсутствующий заказ
     ----------------------------------------------------------------------
 
     FOR i IN 1..30 LOOP
@@ -407,7 +447,7 @@ END LOOP;
             );
 
             RAISE EXCEPTION
-                'order_id=%: expected FOREIGN KEY violation, but INSERT succeeded',
+                'order_id=%: expected FOREIGN KEY violation',
                 1000000 + i;
 
         EXCEPTION
@@ -418,77 +458,80 @@ END LOOP;
 
 
     ----------------------------------------------------------------------
-    -- Свойство:
-    -- два мероприятия не могут иметь пересекающиеся брони
-    -- на одной площадке.
+    -- 13. Время окончания бронирования должно быть позже начала
+    ----------------------------------------------------------------------
+
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO location_bookings (
+                location_id,
+                event_id,
+                start_time,
+                end_time
+            )
+            VALUES (
+                v_location_id,
+                v_event_id,
+                now() + INTERVAL '10 days',
+                now() + INTERVAL '9 days'
+            );
+
+            RAISE EXCEPTION
+                'invalid booking interval: expected CHECK violation';
+
+        EXCEPTION
+            WHEN check_violation THEN
+                NULL;
+        END;
+    END LOOP;
+
+
+        ----------------------------------------------------------------------
+    -- 14. Один event может иметь только одну запись бронирования
     ----------------------------------------------------------------------
 
     INSERT INTO location_bookings (
         location_id,
         event_id,
-        period
+        start_time,
+        end_time
     )
     VALUES (
         v_location_id,
         v_event_id,
-        tstzrange(
-            v_test_start,
-            v_test_start + INTERVAL '2 hours',
-            '[)'
-        )
+        now() + INTERVAL '20 days',
+        now() + INTERVAL '20 days' + INTERVAL '2 hours'
     );
 
-
-    INSERT INTO events (
-        title,
-        datetime,
-        duration,
-        type,
-        ticket_price,
-        status,
-        user_id,
-        location_id
-    )
-    VALUES (
-        'Overlapping booking event',
-        v_test_start + INTERVAL '30 minutes',
-        INTERVAL '1 hour',
-        'test',
-        100.00,
-        'published',
-        v_organizer_id,
-        v_location_id
-    )
-    RETURNING event_id INTO v_event_2_id;
-
-
-    BEGIN
-        INSERT INTO location_bookings (
-            location_id,
-            event_id,
-            period
-        )
-        VALUES (
-            v_location_id,
-            v_event_2_id,
-            tstzrange(
-                v_test_start + INTERVAL '30 minutes',
-                v_test_start + INTERVAL '90 minutes',
-                '[)'
+    FOR i IN 1..30 LOOP
+        BEGIN
+            INSERT INTO location_bookings (
+                location_id,
+                event_id,
+                start_time,
+                end_time
             )
-        );
+            VALUES (
+                v_location_id,
+                v_event_id,
+                now() + (20 + i) * INTERVAL '1 day',
+                now() + (20 + i) * INTERVAL '1 day'
+                    + INTERVAL '1 hour'
+            );
 
-        RAISE EXCEPTION
-            'overlapping booking: expected EXCLUDE constraint violation, but INSERT succeeded';
+            RAISE EXCEPTION
+                'event_id=%: expected UNIQUE violation',
+                v_event_id;
 
-    EXCEPTION
-        WHEN exclusion_violation THEN
-            NULL;
-    END;
+        EXCEPTION
+            WHEN unique_violation THEN
+                NULL;
+        END;
+    END LOOP;
 
 
     ----------------------------------------------------------------------
-    -- Все проверки успешно завершились.
+    -- Все проверки успешно завершились
     ----------------------------------------------------------------------
 
     RAISE NOTICE 'Property-based schema checks passed';
