@@ -734,3 +734,28 @@
 | S8 | Существенное изменение мероприятия | Организатор | events (W), location_bookings (W), tickets (R — проверка наличия продаж) |
 
 W — запись, R — чтение.
+
+
+
+
+
+
+
+# Data generator
+
+Воспроизводимый генератор данных. Seed фиксирован в config.json.
+Все PRNG инстанцируются через rngFor(seed, table, column) —
+добавление новых таблиц не сдвигает существующие данные.
+
+Запуск:
+
+    docker compose up -d db // если не поднят
+
+    make clean run
+
+Проверка воспроизводимости:
+    make clean run
+    psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
+    make clean run
+    psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
+    # хеши совпадают

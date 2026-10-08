@@ -1,0 +1,4 @@
+{
+  "seed": 42,
+  "dsn": "postgres://poster:secret@localhost:5433/poster?sslmode=disable"
+}
