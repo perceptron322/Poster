@@ -86,6 +86,12 @@ negatives:
 	done; \
 	exit $$fail
 
+queries:
+	@for f in scripts/queries/*.sql; do \
+	    echo "== $$f =="; \
+	    docker compose exec -T db psql -U poster -d poster -v ON_ERROR_STOP=1 < $$f; \
+	done
+	
 property-tests:
 	@echo "== Property-based tests =="
 	@$(PSQL) < scripts/property/schema_constraints.sql
