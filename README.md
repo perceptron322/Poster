@@ -759,3 +759,26 @@ W — запись, R — чтение.
     make clean run
     psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
     # хеши совпадают
+
+
+# scripts/seed — генератор тестовых данных
+
+Детерминированный генератор для PostgreSQL. Один seed → одинаковый
+датасет (проверяется через md5). Два режима: `dev` (быстрый) и `load`
+(3+ млн строк в `tickets`).
+
+## Запуск
+
+```bash
+cd scripts/seed
+
+make clean dev      # ~90 тыс. tickets, ~10 секунд
+make measure        # показать объёмы
+
+make clean load     # ~4.1 млн tickets, ~8 минут
+make measure
+
+## Проверка
+
+PG_DSN="postgres://poster:secret@localhost:5433/poster?sslmode=disable"
+psql "$PG_DSN" -f verify.sql
