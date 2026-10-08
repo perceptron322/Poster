@@ -57,3 +57,9 @@ FROM location_bookings a
 JOIN location_bookings b
   ON a.location_id = b.location_id AND a.booking_id < b.booking_id
 WHERE a.start_time < b.end_time AND b.start_time < a.end_time;
+
+SELECT count(*) AS overlapping_bookings
+FROM location_bookings a
+JOIN location_bookings b
+  ON a.location_id = b.location_id AND a.booking_id < b.booking_id
+WHERE a.start_time < b.end_time AND b.start_time < a.end_time;

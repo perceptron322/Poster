@@ -6,9 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math" // [З3-логнормаль] добавлено для Exp/NormFloat64/Pow
+	"math"
 	"math/rand"
 	"os"
+	"sort"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -332,6 +333,14 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 // ---------- location_bookings ----------
 
 func genBookings(tx *sql.Tx, cfg Config, events []eventRow) {
+	// [З3-EXCLUDE] Сортируем по возрастанию start_time.
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].Datetime.Before(events[j].Datetime)
+	})
+
+	type interval struct{ start, end time.Time }
+	busy := make(map[int64][]interval)
+
 	stmt, err := tx.Prepare(`
 		INSERT INTO location_bookings (location_id, event_id, start_time, end_time)
 		VALUES ($1,$2,$3,$4)`)
@@ -340,15 +349,41 @@ func genBookings(tx *sql.Tx, cfg Config, events []eventRow) {
 	}
 	defer stmt.Close()
 
+	inserted, skippedCancelled, skippedOverlap := 0, 0, 0
+
 	for _, e := range events {
-		// [З3-скип] Отменённое событие площадку не занимает.
+		// Отменённое событие площадку не занимает.
 		if e.Status == "cancelled" {
+			skippedCancelled++
 			continue
 		}
-		if _, err := stmt.Exec(e.LocationID, e.ID, e.Datetime, e.Datetime.Add(e.Duration)); err != nil {
+
+		eStart := e.Datetime
+		eEnd := e.Datetime.Add(e.Duration)
+
+		// [З3-EXCLUDE] Проверка пересечения с уже занятыми слотами.
+		// Два интервала пересекаются, если eStart < b.end && b.start < eEnd.
+		overlap := false
+		for _, b := range busy[e.LocationID] {
+			if eStart.Before(b.end) && b.start.Before(eEnd) {
+				overlap = true
+				break
+			}
+		}
+		if overlap {
+			skippedOverlap++
+			continue
+		}
+
+		if _, err := stmt.Exec(e.LocationID, e.ID, eStart, eEnd); err != nil {
 			log.Fatalf("insert booking: %v", err)
 		}
+		busy[e.LocationID] = append(busy[e.LocationID], interval{eStart, eEnd})
+		inserted++
 	}
+
+	log.Printf("bookings: inserted=%d skipped_cancelled=%d skipped_overlap=%d",
+		inserted, skippedCancelled, skippedOverlap)
 }
 
 // ---------- orders + tickets ----------

@@ -1,6 +1,6 @@
 {
   "seed": 42,
-  "mode": "load",
+  "mode": "dev",
   "dsn": "postgres://poster:secret@localhost:5433/poster?sslmode=disable",
   "ticket_rows": 0
 }

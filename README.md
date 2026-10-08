@@ -751,6 +751,8 @@ W — запись, R — чтение.
 
     docker compose up -d db // если не поднят
 
+    make migrate
+
     make clean run
 
 Проверка воспроизводимости:
@@ -782,3 +784,18 @@ make measure
 
 PG_DSN="postgres://poster:secret@localhost:5433/poster?sslmode=disable"
 psql "$PG_DSN" -f verify.sql
+
+
+## Распределения с перекосом:
+
+ticket_status: valid 67%, used 18%, cancelled 10%, returned 5% — правильный порядок;
+
+order_status: paid 80%, остальные поровну;
+
+event_type: concert 35%, lecture 19%, theatre 17%, festival 11%, other 8%;
+
+user_role: customer 82%, organizer 13%, guest 5%;
+
+quarter: 258 vs 83/81/78 — сгущение к началу окна в 3 раза;
+
+bucket_days_before: 15467 vs 7195/7092 — большинство заказов в последние 10 дней перед событием.
