@@ -25,6 +25,8 @@ help:
 	@echo "  make run              — запустить приложение"
 	@echo "  make build            — собрать бинарник"
 	@echo "  make print-db-url     — показать текущий DB_URL"
+	@echo "  make queries     — выполнить пять бизнес-запросов из scripts/queries/"
+	@echo "  make transactions     — выполнить транзакцию возврата билета из scripts/transactions/"
 
 db-up:
 	docker compose up -d db
@@ -85,6 +87,16 @@ negatives:
 		fi; \
 	done; \
 	exit $$fail
+
+queries:
+	@for f in scripts/queries/*.sql; do \
+	    echo "== $$f =="; \
+	    docker compose exec -T db psql -U poster -d poster -v ON_ERROR_STOP=1 < $$f; \
+	done
+
+transactions:
+	docker compose exec -T db psql -U poster -d poster -v ON_ERROR_STOP=1 \
+	    < scripts/transactions/refund_one_ticket.sql
 
 property-tests:
 	@echo "== Property-based tests =="
