@@ -565,7 +565,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| user_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
+| user_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
 | name | VARCHAR(200) | NOT NULL | Имя пользователя |
 | email | VARCHAR(255) | NOT NULL, UNIQUE (uq_users_email) | Email; уникален в системе |
 | role | VARCHAR(20) | NOT NULL, DEFAULT 'guest', CHECK (chk_users_role) | Роль: guest / customer / organizer |
@@ -581,7 +581,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| location_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
+| location_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
 | name | VARCHAR(200) | NOT NULL | Название площадки |
 | address | VARCHAR(500) | NOT NULL | Адрес площадки |
 | capacity | INTEGER | NOT NULL, CHECK (chk_locations_capacity) | Количество мест, > 0 |
@@ -599,7 +599,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| event_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
+| event_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
 | title | VARCHAR(300) | NOT NULL | Название мероприятия |
 | description | TEXT | — | Описание |
 | cover | VARCHAR(500) | — | URL обложки |
@@ -626,7 +626,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| order_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
+| order_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Дата оформления |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK (chk_orders_status) | pending / paid / cancelled / refunded |
 | total_price | NUMERIC(10,2) | NOT NULL, DEFAULT 0, CHECK (chk_orders_total) | Стоимость заказа, >= 0 |
@@ -646,7 +646,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| ticket_id | INTEGER | PK, SERIAL | Суррогатный первичный ключ |
+| ticket_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
 | price | NUMERIC(10,2) | NOT NULL, CHECK (chk_tickets_price) | Цена на момент покупки, > 0 |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'valid', CHECK (chk_tickets_status) | valid / used / returned / cancelled |
 | order_id | INTEGER | NOT NULL, FK → orders(order_id) ON DELETE CASCADE | Заказ, к которому относится билет |
@@ -662,7 +662,7 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| booking_id | INTEGER | PK, SERIAL| Суррогатный первичный ключ |
+| booking_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
 | location_id | INTEGER | NOT NULL, FK → locations(location_id) ON DELETE RESTRICT | Занятая площадка |
 | event_id | INTEGER | NOT NULL, UNIQUE | Мероприятие, занявшее площадку; не более одной брони на мероприятие |
 | start_time | TIMESTAMPTZ | NOT NULL | Начало бронирования |

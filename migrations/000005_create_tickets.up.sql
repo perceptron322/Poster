@@ -1,5 +1,5 @@
 CREATE TABLE tickets (
-    ticket_id SERIAL PRIMARY KEY,
+    ticket_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     price DECIMAL(10,2) NOT NULL CHECK (price > 0),
     status VARCHAR(20) NOT NULL DEFAULT 'valid'
         CHECK (status IN ('valid', 'used', 'returned', 'cancelled')),

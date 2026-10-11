@@ -1,5 +1,5 @@
 CREATE TABLE orders (
-    order_id SERIAL PRIMARY KEY,
+    order_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     status VARCHAR(20) NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'paid', 'cancelled', 'refunded')),

@@ -1,5 +1,5 @@
 CREATE TABLE location_bookings (
-    booking_id SERIAL PRIMARY KEY,
+    booking_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     location_id INT NOT NULL,
     event_id INT NOT NULL UNIQUE,
     start_time TIMESTAMPTZ NOT NULL,

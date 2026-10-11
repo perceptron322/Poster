@@ -1,5 +1,5 @@
 CREATE TABLE events (
-    event_id SERIAL PRIMARY KEY,
+    event_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     title VARCHAR(300) NOT NULL,
     description TEXT,
     cover VARCHAR(500),
