@@ -1,0 +1,35 @@
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=15449.22..15499.22 rows=20000 width=47) (actual time=176.686..177.410 rows=16767 loops=1)
+   Sort Key: (sum(t.price)) DESC
+   Sort Method: quicksort  Memory: 1565kB
+   Buffers: shared hit=3686
+   ->  HashAggregate  (cost=13770.45..14020.45 rows=20000 width=47) (actual time=168.930..172.287 rows=16767 loops=1)
+         Group Key: e.event_id
+         Batches: 1  Memory Usage: 7185kB
+         Buffers: shared hit=3683
+         ->  Hash Join  (cost=4496.22..12563.40 rows=241410 width=21) (actual time=27.968..125.687 rows=240945 loops=1)
+               Hash Cond: (o.event_id = e.event_id)
+               Buffers: shared hit=3683
+               ->  Hash Join  (cost=3694.22..11127.57 rows=241410 width=10) (actual time=23.833..87.415 rows=240945 loops=1)
+                     Hash Cond: (t.order_id = o.order_id)
+                     Buffers: shared hit=3331
+                     ->  Seq Scan on tickets t  (cost=0.00..6799.62 rows=241410 width=10) (actual time=0.004..26.289 rows=240945 loops=1)
+                           Filter: ((status)::text = 'valid'::text)
+                           Rows Removed by Filter: 117265
+                           Buffers: shared hit=2322
+                     ->  Hash  (cost=2202.43..2202.43 rows=119343 width=8) (actual time=23.333..23.334 rows=119343 loops=1)
+                           Buckets: 131072  Batches: 1  Memory Usage: 5686kB
+                           Buffers: shared hit=1009
+                           ->  Seq Scan on orders o  (cost=0.00..2202.43 rows=119343 width=8) (actual time=0.003..10.978 rows=119343 loops=1)
+                                 Buffers: shared hit=1009
+               ->  Hash  (cost=552.00..552.00 rows=20000 width=15) (actual time=4.022..4.025 rows=20000 loops=1)
+                     Buckets: 32768  Batches: 1  Memory Usage: 1194kB
+                     Buffers: shared hit=352
+                     ->  Seq Scan on events e  (cost=0.00..552.00 rows=20000 width=15) (actual time=0.004..1.734 rows=20000 loops=1)
+                           Buffers: shared hit=352
+ Planning:
+   Buffers: shared hit=348
+ Planning Time: 0.887 ms
+ Execution Time: 179.286 ms
+(32 rows)
