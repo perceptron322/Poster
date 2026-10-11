@@ -1,0 +1,31 @@
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2136.51..2150.08 rows=5425 width=453) (actual time=11.497..11.712 rows=5425 loops=1)
+   Sort Key: e.datetime
+   Sort Method: quicksort  Memory: 615kB
+   Buffers: shared hit=473 read=40
+   ->  Hash Join  (cost=325.27..1800.02 rows=5425 width=453) (actual time=1.411..10.442 rows=5425 loops=1)
+         Hash Cond: (e.location_id = l.location_id)
+         Buffers: shared hit=470 read=40
+         ->  Hash Join  (cost=313.47..1773.22 rows=5425 width=39) (actual time=1.387..9.894 rows=5425 loops=1)
+               Hash Cond: (u.user_id = e.user_id)
+               Buffers: shared hit=469 read=40
+               ->  Seq Scan on users u  (cost=0.00..968.00 rows=50000 width=14) (actual time=0.004..3.444 rows=50000 loops=1)
+                     Buffers: shared hit=468
+               ->  Hash  (cost=245.66..245.66 rows=5425 width=33) (actual time=1.355..1.355 rows=5425 loops=1)
+                     Buckets: 8192  Batches: 1  Memory Usage: 446kB
+                     Buffers: shared hit=1 read=40
+                     ->  Index Only Scan using idx_bench_published_datetime on events e  (cost=0.28..245.66 rows=5425 width=33) (actual time=0.032..0.775 rows=5425 loops=1)
+                           Heap Fetches: 0
+                           Buffers: shared hit=1 read=40
+         ->  Hash  (cost=10.80..10.80 rows=80 width=422) (actual time=0.017..0.017 rows=20 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               Buffers: shared hit=1
+               ->  Seq Scan on locations l  (cost=0.00..10.80 rows=80 width=422) (actual time=0.011..0.012 rows=20 loops=1)
+                     Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=361 read=1
+ Planning Time: 0.878 ms
+ Execution Time: 11.943 ms
+(27 rows)
+
