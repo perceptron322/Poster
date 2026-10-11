@@ -18,7 +18,6 @@ help:
 	@echo "  make db-logs          — логи контейнера БД"
 	@echo "  make db-shell         — psql внутри контейнера"
 	@echo "  make migrate          — применить все миграции"
-	@echo "  make migrate-down     — откатить последнюю миграцию"
 	@echo "  make migrate-create   — создать миграцию (name=...)"
 	@echo "  make migrate-version  — текущая версия схемы"
 	@echo "  make reset            — сбросить БД и накатить миграции заново"
@@ -42,9 +41,6 @@ db-shell:
 
 migrate:
 	migrate -path migrations -database "$(DB_URL)" up
-
-migrate-down:
-	migrate -path migrations -database "$(DB_URL)" down 1
 
 migrate-create:
 	@if [ -z "$(name)" ]; then echo "Использование: make migrate-create name=create_users"; exit 1; fi
