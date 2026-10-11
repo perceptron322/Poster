@@ -1,0 +1,32 @@
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2492.86..2506.42 rows=5425 width=453) (actual time=12.649..12.859 rows=5425 loops=1)
+   Sort Key: e.datetime
+   Sort Method: quicksort  Memory: 615kB
+   Buffers: shared hit=824 dirtied=1
+   ->  Hash Join  (cost=681.61..2156.36 rows=5425 width=453) (actual time=3.765..11.657 rows=5425 loops=1)
+         Hash Cond: (e.location_id = l.location_id)
+         Buffers: shared hit=821 dirtied=1
+         ->  Hash Join  (cost=669.81..2129.56 rows=5425 width=39) (actual time=3.742..11.166 rows=5425 loops=1)
+               Hash Cond: (u.user_id = e.user_id)
+               Buffers: shared hit=820
+               ->  Seq Scan on users u  (cost=0.00..968.00 rows=50000 width=14) (actual time=0.002..2.870 rows=50000 loops=1)
+                     Buffers: shared hit=468
+               ->  Hash  (cost=602.00..602.00 rows=5425 width=33) (actual time=3.716..3.716 rows=5425 loops=1)
+                     Buckets: 8192  Batches: 1  Memory Usage: 446kB
+                     Buffers: shared hit=352
+                     ->  Seq Scan on events e  (cost=0.00..602.00 rows=5425 width=33) (actual time=0.002..3.020 rows=5425 loops=1)
+                           Filter: ((status)::text = 'published'::text)
+                           Rows Removed by Filter: 14575
+                           Buffers: shared hit=352
+         ->  Hash  (cost=10.80..10.80 rows=80 width=422) (actual time=0.016..0.017 rows=20 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               Buffers: shared hit=1 dirtied=1
+               ->  Seq Scan on locations l  (cost=0.00..10.80 rows=80 width=422) (actual time=0.005..0.007 rows=20 loops=1)
+                     Buffers: shared hit=1 dirtied=1
+ Planning:
+   Buffers: shared hit=327
+ Planning Time: 0.824 ms
+ Execution Time: 13.053 ms
+(28 rows)
+
