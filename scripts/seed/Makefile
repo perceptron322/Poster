@@ -1,6 +1,6 @@
-PG_DSN ?= postgres://poster:secret@localhost:5433/poster?sslmode=disable
+PSQL = docker compose -f ../../docker-compose.yml exec -T db psql -U poster -d poster
 
-.PHONY: run dev load measure clean
+.PHONY: run dev load measure verify clean
 
 run:
 	go run generate.go -config config.json
@@ -14,7 +14,10 @@ load:
 	go run generate.go -config config.json
 
 measure:
-	psql "$(PG_DSN)" -c "SELECT 'tickets' t, count(*) FROM tickets UNION ALL SELECT 'orders', count(*) FROM orders UNION ALL SELECT 'events', count(*) FROM events;"
+	$(PSQL) -c "SELECT 'tickets' t, count(*) FROM tickets UNION ALL SELECT 'orders', count(*) FROM orders UNION ALL SELECT 'events', count(*) FROM events;"
+
+verify:
+	$(PSQL) < verify.sql
 
 clean:
-	psql "$(PG_DSN)" -c 'TRUNCATE tickets, orders, location_bookings, events, locations, users RESTART IDENTITY CASCADE;'
+	$(PSQL) -c 'TRUNCATE tickets, orders, location_bookings, events, locations, users RESTART IDENTITY CASCADE;'

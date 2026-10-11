@@ -6,19 +6,21 @@
 Все PRNG инстанцируются через rngFor(seed, table, column) —
 добавление новых таблиц не сдвигает существующие данные.
 
-Запуск:
+Запуск (из корня репозитория):
 
-    docker compose up -d db // если не поднят
-
+    docker compose up -d db   # если не поднят
     make migrate
-
+    cd scripts/seed
     make clean run
 
-Проверка воспроизводимости:
+Проверка воспроизводимости (из `scripts/seed`):
+
     make clean run
-    psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
+    docker compose -f ../../docker-compose.yml exec -T db psql -U poster -d poster \
+      -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
     make clean run
-    psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
+    docker compose -f ../../docker-compose.yml exec -T db psql -U poster -d poster \
+      -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
     # хеши совпадают
 
 
@@ -41,8 +43,9 @@ make measure
 ```
 ## Проверка
 
-PG_DSN="postgres://poster:secret@localhost:5433/poster?sslmode=disable"
-psql "$PG_DSN" -f verify.sql
+```bash
+make verify         # прогоняет verify.sql через psql внутри контейнера db
+```
 
 
 ## Распределения с перекосом:
