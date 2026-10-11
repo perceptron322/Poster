@@ -1,0 +1,125 @@
+# Спринт 3
+
+# Data generator
+
+Воспроизводимый генератор данных. Seed фиксирован в config.json.
+Все PRNG инстанцируются через rngFor(seed, table, column) —
+добавление новых таблиц не сдвигает существующие данные.
+
+Запуск:
+
+    docker compose up -d db // если не поднят
+
+    make migrate
+
+    make clean run
+
+Проверка воспроизводимости:
+    make clean run
+    psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
+    make clean run
+    psql "$PG_DSN" -c "SELECT md5(string_agg(event_id||':'||title, ',' ORDER BY event_id)) FROM events;"
+    # хеши совпадают
+
+
+# scripts/seed — генератор тестовых данных
+
+Детерминированный генератор для PostgreSQL. Один seed → одинаковый
+датасет (проверяется через md5). Два режима: `dev` (быстрый) и `load`
+(3+ млн строк в `tickets`).
+
+## Запуск
+
+```bash
+cd scripts/seed
+
+make clean dev      # ~90 тыс. tickets, ~10 секунд
+make measure        # показать объёмы
+
+make clean load     # ~4.1 млн tickets, ~8 минут
+make measure
+```
+## Проверка
+
+PG_DSN="postgres://poster:secret@localhost:5433/poster?sslmode=disable"
+psql "$PG_DSN" -f verify.sql
+
+
+## Распределения с перекосом:
+
+ticket_status: valid 67%, used 18%, cancelled 10%, returned 5% — правильный порядок;
+
+order_status: paid 80%, остальные поровну;
+
+event_type: concert 35%, lecture 19%, theatre 17%, festival 11%, other 8%;
+
+user_role: customer 82%, organizer 13%, guest 5%;
+
+quarter: 258 vs 83/81/78 — сгущение к началу окна в 3 раза;
+
+bucket_days_before: 15467 vs 7195/7092 — большинство заказов в последние 10 дней перед событием.
+
+## Бизнес-запросы
+
+### Запрос 1. Каталог мероприятий
+
+**Бизнес-вопрос:** какие мероприятия можно купить, где они проходят и кто организатор?
+
+**Параметры:** нет.
+
+**SQL:** `scripts/queries/01_catalog.sql` — соединяет 3 таблицы (`events`, `locations`, `users`).
+
+<img src="docs/screenshots/queries_result.png" alt="Каталог мероприятий" width="800">
+
+### Запрос 2. Заказы покупателя
+
+**Бизнес-вопрос:** какие заказы сделал конкретный покупатель?
+
+**Параметры:** `user_id` — id покупателя.
+
+**SQL:** `scripts/queries/02_user_orders.sql` — соединяет 3 таблицы (`orders`, `events`, `users`).
+
+### Запрос 3. Билеты по мероприятиям
+
+**Бизнес-вопрос:** сколько билетов купили на каждое мероприятие?
+
+**Параметры:** нет.
+
+**SQL:** `scripts/queries/03_tickets_per_event.sql` — 3 таблицы + `GROUP BY` + `COUNT`.
+
+### Запрос 4. Выручка по мероприятиям
+
+**Бизнес-вопрос:** сколько денег принесло каждое мероприятие?
+
+**Параметры:** нет.
+
+**SQL:** `scripts/queries/04_revenue_per_event.sql` — 3 таблицы + `GROUP BY` + `SUM`. Учитываются только активные билеты (`status = valid`).
+
+### Запрос 5. Покупатели с несколькими заказами
+
+**Бизнес-вопрос:** кто из покупателей сделал больше одного заказа?
+
+**Параметры:** порог в `HAVING` (> 1).
+
+**SQL:** `scripts/queries/05_active_buyers.sql` — `JOIN` + `GROUP BY` + `HAVING`.
+
+## Многошаговая транзакция
+
+**Сценарий:** покупатель возвращает один билет из заказа.
+
+**Что меняется:** две связанные таблицы — `tickets` и `orders`.
+
+**SQL:** `scripts/transactions/refund_one_ticket.sql`
+
+**Состояние до:**
+
+<img src="docs/screenshots/before_transaction.png" alt="До транзакции" width="400">
+
+**После:**
+
+<img src="docs/screenshots/after_transaction.png" alt="После транзакции" width="400">
+
+**Что делает транзакция:**
+
+1. Один активный билет заказа переводится в статус `returned`.
+2. `orders.total_price` пересчитывается как сумма активных билетов. `COALESCE(..., 0)` защищает от `NULL`, когда активных билетов не остаётся.
