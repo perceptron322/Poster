@@ -4,15 +4,16 @@ SELECT
 FROM users u
 JOIN orders o ON o.user_id = u.user_id
 GROUP BY u.user_id, u.name
-HAVING COUNT(o.order_id) > 1;
+HAVING COUNT(o.order_id) > 30
+ORDER BY заказов DESC
+LIMIT 20;
 
--- Бизнес-вопрос:
---   Кто из покупателей сделал больше одного заказа?
+-- Бизнес-задача:
+--   Найти самых активных покупателей.
 --
 -- Параметры:
---   Порог в HAVING: > 1.
+--   Порог в HAVING: > 30. 
 --
--- Соединения:
---   users + orders (2 таблицы).
---   GROUP BY + COUNT + HAVING — единственный запрос с HAVING
---   в наборе.
+-- Что делает:
+--   Соединяет 2 таблицы (users, orders), группирует по пользователю,
+--   считает количество заказов.

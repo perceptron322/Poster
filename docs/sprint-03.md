@@ -72,8 +72,6 @@ bucket_days_before: 15467 vs 7195/7092 — большинство заказов
 
 **SQL:** `scripts/queries/01_catalog.sql` — соединяет 3 таблицы (`events`, `locations`, `users`).
 
-<img src="docs/screenshots/queries_result.png" alt="Каталог мероприятий" width="800">
-
 ### Запрос 2. Заказы покупателя
 
 **Бизнес-вопрос:** какие заказы сделал конкретный покупатель?
@@ -106,6 +104,9 @@ bucket_days_before: 15467 vs 7195/7092 — большинство заказов
 
 **SQL:** `scripts/queries/05_active_buyers.sql` — `JOIN` + `GROUP BY` + `HAVING`.
 
+<img src="screenshots/queries_res1.png" alt="" width="800">
+<img src="screenshots/queries_res2.png" alt="" width="400">
+
 ## Многошаговая транзакция
 
 **Сценарий:** покупатель возвращает один билет из заказа.
@@ -116,11 +117,11 @@ bucket_days_before: 15467 vs 7195/7092 — большинство заказов
 
 **Состояние до:**
 
-<img src="docs/screenshots/before_transaction.png" alt="До транзакции" width="400">
+<img src="screenshots/before_transaction.png" alt="До транзакции" width="400">
 
 **После:**
 
-<img src="docs/screenshots/after_transaction.png" alt="После транзакции" width="400">
+<img src="screenshots/after_transaction.png" alt="После транзакции" width="400">
 
 **Что делает транзакция:**
 
