@@ -36,12 +36,12 @@
 
 ## Общие соглашения
 
-- Первичные ключи — суррогатные, INTEGER GENERATED ALWAYS AS IDENTITY.
-- Внешние ключи — с явным ON DELETE, все FK проиндексированы.
-- Денежные суммы — NUMERIC(10,2), значения строго > 0.
-- Дата и время — TIMESTAMPTZ (с таймзоной).
-- Статусы — строковые VARCHAR(20) с ограничением CHECK IN (...).
-- Все ограничения именованы (uq_*, chk_*, fk_*, idx_*) — для удобства негативных тестов.
+- Первичные ключи — суррогатные, `INTEGER GENERATED ALWAYS AS IDENTITY`.
+- Внешние ключи — с явным `ON DELETE`, все FK проиндексированы (миграция `000007`).
+- Денежные суммы — `DECIMAL(10,2)`, значения строго > 0.
+- Дата и время — `TIMESTAMPTZ` (с таймзоной).
+- Статусы — строковые `VARCHAR(20)` с ограничением `CHECK IN (...)`.
+- Ограничения задаются inline, без явных имён. Единственное именованное ограничение — `ex_bookings_no_overlap` (миграция `000008`).
 
 ---
 
@@ -51,12 +51,13 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| user_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
-| name | VARCHAR(200) | NOT NULL | Имя пользователя |
-| email | VARCHAR(255) | NOT NULL, UNIQUE (uq_users_email) | Email; уникален в системе |
-| role | VARCHAR(20) | NOT NULL, DEFAULT 'guest', CHECK (chk_users_role) | Роль: guest / customer / organizer |
+| `user_id` | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| `name` | VARCHAR(200) | NOT NULL | Имя пользователя |
+| `email` | VARCHAR(255) | NOT NULL, UNIQUE | Email; уникален в системе |
+| `role` | VARCHAR(20) | NOT NULL, DEFAULT 'guest', CHECK (role IN ('guest','customer','organizer')) | Роль: guest / customer / organizer |
 
 Связанные сценарии: S6 (регистрация, аутентификация).
+
 Владелец данных: команда аутентификации.
 
 ---
@@ -67,14 +68,15 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| location_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
-| name | VARCHAR(200) | NOT NULL | Название площадки |
-| address | VARCHAR(500) | NOT NULL | Адрес площадки |
-| capacity | INTEGER | NOT NULL, CHECK (chk_locations_capacity) | Количество мест, > 0 |
+| `location_id` | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| `name` | VARCHAR(200) | NOT NULL | Название площадки |
+| `address` | VARCHAR(500) | NOT NULL | Адрес площадки |
+| `capacity` | INT | NOT NULL, CHECK (capacity > 0) | Количество мест, > 0 |
 
 Занятость площадки хранится не здесь, а в отдельной таблице `location_bookings`.
 
 Связанные сценарии: S1 (создание мероприятия), S2 (проверка вместимости).
+
 Владелец данных: команда мероприятий.
 
 ---
@@ -85,23 +87,24 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| event_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
-| title | VARCHAR(300) | NOT NULL | Название мероприятия |
-| description | TEXT | — | Описание |
-| cover | VARCHAR(500) | — | URL обложки |
-| datetime | TIMESTAMPTZ | NOT NULL | Дата и время начала |
-| duration | INTERVAL | NOT NULL, CHECK (chk_events_duration) | Длительность, > 0 |
-| type | VARCHAR(50) | NOT NULL | Тип (concert / lecture / …) |
-| ticket_price | NUMERIC(10,2) | NOT NULL, CHECK (chk_events_price) | Цена билета, > 0 |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'published', CHECK (chk_events_status) | published / cancelled / finished |
-| user_id | INTEGER | NOT NULL, FK → users(user_id) ON DELETE RESTRICT | Организатор |
-| location_id | INTEGER | NOT NULL, FK → locations(location_id) ON DELETE RESTRICT | Площадка |
+| `event_id` | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| `title` | VARCHAR(300) | NOT NULL | Название мероприятия |
+| `description` | TEXT | — | Описание |
+| `cover` | VARCHAR(500) | — | URL обложки |
+| `datetime` | TIMESTAMPTZ | NOT NULL | Дата и время начала |
+| `duration` | INTERVAL | NOT NULL, CHECK (duration > INTERVAL '0') | Длительность, > 0 |
+| `type` | VARCHAR(50) | NOT NULL, CHECK (type IN ('concert','lecture','theatre','festival','other')) | Тип мероприятия |
+| `ticket_price` | DECIMAL(10,2) | NOT NULL, CHECK (ticket_price > 0) | Цена билета, > 0 |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT 'published', CHECK (status IN ('published','cancelled','finished')) | published / cancelled / finished |
+| `user_id` | INT | NOT NULL, FK → users(user_id) ON DELETE RESTRICT | Организатор |
+| `location_id` | INT | NOT NULL, FK → locations(location_id) ON DELETE RESTRICT | Площадка |
 
-Дополнительное ограничение `uq_events_id_location UNIQUE (event_id, location_id)` — технический опорный ключ, на который ссылается составной FK из `location_bookings`. Собственной бизнес-семантики не несёт: `event_id` уже уникален сам по себе.
+Дополнительное ограничение `UNIQUE (event_id, location_id)` — технический опорный ключ, на который ссылается составной FK из `location_bookings`. Собственной бизнес-семантики не несёт: `event_id` уже уникален сам по себе.
 
-Триггер `trg_events_not_past` запрещает назначать дату в прошлом. Проверка срабатывает только при INSERT и при фактическом изменении `datetime`, иначе перевод прошедшего мероприятия в `finished` блокировался бы.
+Проверка даты в прошлом (бизнес-правило 5) выполняется на стороне приложения — в схеме БД она не выражена.
 
 Связанные сценарии: S1, S4, S5, S7, S8.
+
 Владелец данных: команда мероприятий.
 
 ---
@@ -112,16 +115,17 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| order_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Дата оформления |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK (chk_orders_status) | pending / paid / cancelled / refunded |
-| total_price | NUMERIC(10,2) | NOT NULL, DEFAULT 0, CHECK (chk_orders_total) | Стоимость заказа, >= 0 |
-| user_id | INTEGER | NOT NULL, FK → users(user_id) ON DELETE RESTRICT | Покупатель |
-| event_id | INTEGER | NOT NULL, FK → events(event_id) ON DELETE RESTRICT | Мероприятие |
+| `order_id` | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Дата оформления |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK (status IN ('pending','paid','cancelled','refunded')) | pending / paid / cancelled / refunded |
+| `total_price` | DECIMAL(10,2) | NOT NULL, DEFAULT 0, CHECK (total_price >= 0) | Стоимость заказа, >= 0 |
+| `user_id` | INT | NOT NULL, FK → users(user_id) ON DELETE RESTRICT | Покупатель |
+| `event_id` | INT | NOT NULL, FK → events(event_id) ON DELETE RESTRICT | Мероприятие |
 
-Денормализация: total_price — кэш суммы активных билетов заказа. Источник истины — SUM(tickets.price) WHERE status = 'valid'.
+Денормализация: `total_price` — кэш суммы активных билетов заказа. Источник истины — `SUM(tickets.price) WHERE status = 'valid'`.
 
 Связанные сценарии: S2, S3, S7.
+
 Владелец данных: команда заказов.
 
 ---
@@ -132,12 +136,13 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| ticket_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
-| price | NUMERIC(10,2) | NOT NULL, CHECK (chk_tickets_price) | Цена на момент покупки, > 0 |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'valid', CHECK (chk_tickets_status) | valid / used / returned / cancelled |
-| order_id | INTEGER | NOT NULL, FK → orders(order_id) ON DELETE CASCADE | Заказ, к которому относится билет |
+| `ticket_id` | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| `price` | DECIMAL(10,2) | NOT NULL, CHECK (price > 0) | Цена на момент покупки, > 0 |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT 'valid', CHECK (status IN ('valid','used','returned','cancelled')) | valid / used / returned / cancelled |
+| `order_id` | INT | NOT NULL, FK → orders(order_id) ON DELETE CASCADE | Заказ, к которому относится билет |
 
 Связанные сценарии: S2, S3, S7.
+
 Владелец данных: команда заказов.
 
 ---
@@ -148,19 +153,21 @@
 
 | Атрибут | Тип | Ограничения | Описание |
 |---|---|---|---|
-| booking_id | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
-| location_id | INTEGER | NOT NULL, FK → locations(location_id) ON DELETE RESTRICT | Занятая площадка |
-| event_id | INTEGER | NOT NULL, UNIQUE | Мероприятие, занявшее площадку; не более одной брони на мероприятие |
-| start_time | TIMESTAMPTZ | NOT NULL | Начало бронирования |
-| end_time | TIMESTAMPTZ | NOT NULL, CHECK (end_time > start_time) | Конец бронирования |
+| `booking_id` | INTEGER | PK, IDENTITY | Суррогатный первичный ключ |
+| `location_id` | INT | NOT NULL, FK → locations(location_id) ON DELETE RESTRICT | Занятая площадка |
+| `event_id` | INT | NOT NULL, UNIQUE | Мероприятие, занявшее площадку; не более одной брони на мероприятие |
+| `start_time` | TIMESTAMPTZ | NOT NULL | Начало бронирования |
+| `end_time` | TIMESTAMPTZ | NOT NULL | Конец бронирования |
 
 Ограничения:
 
-- составной FK `(event_id, location_id) → events(event_id, location_id)` не позволяет забронировать площадку, отличную от указанной у мероприятия;
+- составной FK `(event_id, location_id) → events(event_id, location_id)` с `ON DELETE CASCADE ON UPDATE CASCADE` не позволяет забронировать площадку, отличную от указанной у мероприятия; при смене площадки мероприятия бронь переезжает автоматически;
 - `UNIQUE (event_id)` гарантирует не более одной брони для одного мероприятия;
-- `CHECK (end_time > start_time)` запрещает некорректный интервал бронирования.
+- `CHECK (end_time > start_time)` запрещает некорректный интервал бронирования;
+- `ex_bookings_no_overlap EXCLUDE USING GIST (location_id WITH =, tstzrange(start_time, end_time) WITH &&)` — две брони одной площадки не могут пересекаться по времени. Требует расширения `btree_gist`, создаётся миграцией `000008`.
 
 Связанные сценарии: S1 (выбор площадки и времени), S4, S7, S8.
+
 Владелец данных: команда мероприятий.
 
 ---
@@ -182,24 +189,24 @@
 
 ## Пояснения
 
-**users** — единственный источник истины о ролях: `guest`, `customer`, `organizer` (значение по умолчанию — `guest`). Пишет только сценарий регистрации и аутентификации (S6). Все остальные таблицы ссылаются на `users` через FK с `ON DELETE RESTRICT` — пользователя нельзя удалить, пока за ним числятся мероприятия или заказы.
+**`users`** — единственный источник истины о ролях: `guest`, `customer`, `organizer` (значение по умолчанию — `guest`). Пишет только сценарий регистрации и аутентификации (S6). Все остальные таблицы ссылаются на `users` через FK с `ON DELETE RESTRICT` — пользователя нельзя удалить, пока за ним числятся мероприятия или заказы.
 
-**locations** — неизменяемый справочник площадок. Приложение работает с ним только на чтение: набор площадок фиксирован и загружается в БД один раз при развёртывании, сценариев создания, редактирования и удаления площадки в системе нет. Организатор выбирает площадку из готового списка (S1), покупатель косвенно читает `capacity` при проверке вместимости (S2), гость видит название и адрес на странице мероприятия (S5). Занятость площадки здесь не хранится, для неё есть `location_bookings`. `ON DELETE RESTRICT` из `events` и `location_bookings` страхует справочник от удаления площадки, на которой уже что-то запланировано.
+**`locations`** — неизменяемый справочник площадок. Приложение работает с ним только на чтение: набор площадок фиксирован и загружается в БД один раз при развёртывании, сценариев создания, редактирования и удаления площадки в системе нет. Организатор выбирает площадку из готового списка (S1), покупатель косвенно читает `capacity` при проверке вместимости (S2), гость видит название и адрес на странице мероприятия (S5). Занятость площадки здесь не хранится, для неё есть `location_bookings`. `ON DELETE RESTRICT` из `events` и `location_bookings` страхует справочник от удаления площадки, на которой уже что-то запланировано.
 
-**events** — основная бизнес-сущность. Пишет только организатор-владелец, у которого `events.user_id` совпадает с текущим пользователем (бизнес-правило 6). Триггер `trg_events_not_past` не даёт назначить дату в прошлом при вставке и при изменении `datetime` (бизнес-правило 5); на прочие UPDATE, в том числе на перевод в `finished`, он не срабатывает. Ограничение `uq_events_id_location` смысловой нагрузки не несёт — это опорный ключ для FK из `location_bookings`.
+**`events`** — основная бизнес-сущность. Пишет только организатор-владелец, у которого `events.user_id` совпадает с текущим пользователем (бизнес-правило 6). Проверка даты в прошлом (бизнес-правило 5) выполняется на стороне приложения. Ограничение `UNIQUE (event_id, location_id)` смысловой нагрузки не несёт — это опорный ключ для FK из `location_bookings`.
 
-**location_bookings** — занятость площадок. Напрямую пользователем не редактируется, пишется системой в одной транзакции с `events`:
+**`location_bookings`** — занятость площадок. Напрямую пользователем не редактируется, пишется системой в одной транзакции с `events`:
 
 - S1, создание мероприятия → вставка брони;
-- S4, S8, перенос даты или площадки → обновление `period`; при смене `events.location_id` бронь переезжает сама за счёт `ON UPDATE CASCADE`;
+- S4, S8, перенос даты или площадки → обновление `start_time` / `end_time`; при смене `events.location_id` бронь переезжает сама за счёт `ON UPDATE CASCADE`;
 - S7, отмена мероприятия → удаление брони. Мероприятие при этом остаётся в БД со своими `datetime` и `location_id`, а площадка освобождается.
 
-Конфликт расписания площадки диагностируется нарушением `ex_bookings_no_overlap`, попытка забронировать чужую площадку — нарушением `fk_bookings_event`. Таблица требует расширения `btree_gist` (создаётся миграцией `000007`).
+Конфликт расписания площадки диагностируется нарушением `ex_bookings_no_overlap`, попытка забронировать чужую площадку — нарушением составного FK. Exclusion constraint требует расширения `btree_gist`, оно создаётся в миграции `000008`.
 
-**orders и tickets** — связанная пара, все изменения проходят в одной транзакции:
+**`orders` и `tickets`** — связанная пара, все изменения проходят в одной транзакции:
 
 - S2, покупка: создание заказа → вставка N билетов → обновление `total_price`;
-- S3, возврат: перевод билетов в `returned` → пересчёт `total_price` → при полном возврате `orders.status = 'cancelled'`;
+- S3, возврат: перевод билетов в `returned` → пересчёт `total_price`;
 - S7, отмена мероприятия: все активные билеты → `cancelled`, заказы → `cancelled`. Инициатор здесь организатор, а не покупатель — единственный сценарий, где в таблицы заказов пишет чужое действие.
 
 `orders.total_price` — денормализованный кэш; источник истины — `SUM(tickets.price)` по билетам заказа со статусом `valid`.
