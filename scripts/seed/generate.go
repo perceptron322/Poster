@@ -53,8 +53,6 @@ func loadConfig(path string) Config {
 	return c
 }
 
-// rngFor — детерминированный PRNG на таблицу/колонку.
-// Один и тот же seed + теги всегда дают одну последовательность.
 func rngFor(seed int64, tags ...string) *rand.Rand {
 	h := int64(1469598103934665603)
 	mix := func(s string) {
@@ -70,11 +68,6 @@ func rngFor(seed int64, tags ...string) *rand.Rand {
 	}
 	return rand.New(rand.NewSource(h))
 }
-
-// ---------- [З3-веса] Справочники с весами ----------
-//
-// Веса задают неравномерность: популярные значения встречаются чаще.
-// pick() выбирает значение пропорционально весам.
 
 var (
 	roleVals    = []string{"guest", "customer", "organizer"}
@@ -93,7 +86,6 @@ var (
 	ticketStatusW = []float64{70, 20, 7, 3}
 )
 
-// pick возвращает значение из vals с вероятностью, пропорциональной weights.
 func pick(r *rand.Rand, vals []string, weights []float64) string {
 	total := 0.0
 	for _, w := range weights {
@@ -110,8 +102,6 @@ func pick(r *rand.Rand, vals []string, weights []float64) string {
 	return vals[len(vals)-1]
 }
 
-// zipfIndex — [З3-Zipf] аппроксимация Zipf: маленькие индексы чаще.
-// s — параметр распределения; s=1.2 даёт «80% на 20%».
 func zipfIndex(r *rand.Rand, n int, s float64) int {
 	u := r.Float64()
 	x := math.Pow(u, -1.0/s) - 1.0
@@ -125,8 +115,6 @@ func zipfIndex(r *rand.Rand, n int, s float64) int {
 	return i
 }
 
-// ---------- метаданные события ----------
-
 type eventRow struct {
 	ID         int64
 	UserID     int64
@@ -134,10 +122,8 @@ type eventRow struct {
 	Datetime   time.Time
 	Duration   time.Duration
 	Price      float64
-	Status     string // [З3-скип] нужен, чтобы не бронировать и не покупать cancelled
+	Status     string
 }
-
-// ---------- main ----------
 
 func main() {
 	var cfgPath string
@@ -200,7 +186,7 @@ func genUsers(tx *sql.Tx, cfg Config) []int64 {
 		var id int64
 		name := fmt.Sprintf("user_%d", i)
 		email := fmt.Sprintf("u%d_%d@example.com", cfg.Seed, i)
-		// [З3-веса] было равномерное r.Intn(3), стало pick по весам
+
 		role := pick(r, roleVals, roleWeights)
 		if err := stmt.QueryRow(name, email, role).Scan(&id); err != nil {
 			log.Fatalf("insert user: %v", err)
@@ -227,8 +213,7 @@ func genLocations(tx *sql.Tx, cfg Config) []int64 {
 	ids := make([]int64, 0, n)
 	for i := 0; i < n; i++ {
 		var id int64
-		// [З3-логнормаль] было cap := 50 + r.Intn(950) — равномерно.
-		// Стало: логнормаль — много маленьких залов, мало огромных.
+
 		capacity := int(math.Round(math.Exp(r.NormFloat64()*0.8 + 4.5)))
 		if capacity < 10 {
 			capacity = 10
@@ -252,7 +237,6 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 	if cfg.Mode == "load" {
 		n = 20_000
 	}
-	// [З3-веса] types остаётся для справки, но выбор — через pick(eventTypes, eventTypeW)
 	types := []string{"concert", "lecture", "theatre", "festival", "other"}
 	_ = types
 
@@ -269,13 +253,10 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 
 	now := time.Now().UTC()
 	windowStart := now.AddDate(0, 0, -30)
-	windowSecs := int64(60 * 24 * 3600) // [З3-сгущение] 60 дней в секундах
+	windowSecs := int64(60 * 24 * 3600)
 
 	rows := make([]eventRow, 0, n)
 	for i := 0; i < n; i++ {
-		// [З3-сгущение] Было равномерное r.Int63n(windowSecs).
-		// Стало: Pow(u, 2) — 50-й процентиль u → 25-й процентиль frac.
-		// События сгущаются к началу окна (плотное прошлое, редкое будущее).
 		frac := math.Pow(r.Float64(), 2.0)
 		start := windowStart.Add(
 			time.Duration(frac*float64(windowSecs)) * time.Second,
@@ -285,7 +266,6 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 		dur := time.Duration(durMin) * time.Minute
 		durStr := fmt.Sprintf("%d minutes", durMin)
 
-		// [З3-статус] Прошедшее → finished, будущее → published|cancelled по весам.
 		status := "published"
 		if start.Before(now) {
 			status = "finished"
@@ -293,8 +273,6 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 			status = pick(r, eventStatus[:2], eventStatusW[:2])
 		}
 
-		// [З3-логнормаль] Было price := float64(500 + r.Intn(4500)).
-		// Стало: логнормаль — много дешёвых билетов, мало дорогих.
 		price := math.Round(math.Exp(r.NormFloat64()*0.7+6.0)*100) / 100
 		if price < 100 {
 			price = 100
@@ -324,7 +302,7 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 			Datetime:   start,
 			Duration:   dur,
 			Price:      price,
-			Status:     status, // [З3-скип] сохраняем для genBookings/genOrdersAndTickets
+			Status:     status,
 		})
 	}
 	return rows
@@ -413,8 +391,6 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 	ordersTotal, ticketsTotal := 0, 0
 
 	for i := 0; i < targetOrders; i++ {
-		// [З3-Zipf] Было ev := events[r.Intn(len(events))] — равномерно.
-		// Стало: 80% заказов на «топовые» события, 20% — равномерно по остальным.
 		var ev eventRow
 		if r.Float64() < 0.8 {
 			ev = events[zipfIndex(r, len(events), 1.2)]
@@ -427,14 +403,10 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 			continue
 		}
 
-		// [З3-веса] Было statuses[r.Intn(len(statuses))].
-		// Стало: pick по весам — paid доминирует.
 		status := pick(r, orderStatus, orderStatusW)
 		nTickets := 1 + r.Intn(5)
 
-		// [З3-сгущение] Было равномерное -r.Int63n(30 дней).
-		// Стало: 50% заказов — в последнюю неделю перед событием,
-		// редкие — за месяц. daysBefore = u^2 * 30, плотнее к 0.
+	
 		daysBefore := int(math.Pow(r.Float64(), 2.0) * 30)
 		created := ev.Datetime.Add(-time.Duration(daysBefore) * 24 * time.Hour)
 		if created.After(time.Now().UTC()) {
