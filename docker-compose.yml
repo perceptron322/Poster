@@ -31,5 +31,27 @@ services:
       interval: 5s
       retries: 10
 
+  replica:
+    image: postgres:16
+    container_name: poster-replica
+    entrypoint: ["/bin/bash", "/scripts/replica-entrypoint.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?Set REPLICATOR_PASSWORD in .env}
+    ports:
+      - "5434:5432"
+    volumes:
+      - replicadata:/var/lib/postgresql/data
+      - ./config/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./scripts/postgres/replica-entrypoint.sh:/scripts/replica-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
+      interval: 5s
+      retries: 10
+
 volumes:
   pgdata:
+  replicadata:
