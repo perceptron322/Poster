@@ -22,10 +22,11 @@ help:
 	@echo "  make migrate-create   — создать миграцию (name=...)"
 	@echo "  make migrate-version  — текущая версия схемы"
 	@echo "  make reset            — сбросить БД и накатить миграции заново"
+	@echo "  make create-roles     — создать роли БД (app, analyst, admin)"
 	@echo "  make run              — запустить приложение"
 	@echo "  make build            — собрать бинарник"
 	@echo "  make print-db-url     — показать текущий DB_URL"
-	@echo "  make queries     — выполнить пять бизнес-запросов из scripts/queries/"
+	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
 	@echo "  make transactions     — выполнить транзакцию возврата билета из scripts/transactions/"
 
 db-up:
