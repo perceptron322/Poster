@@ -1,6 +1,7 @@
-.PHONY: help db-up db-down db-logs db-shell migrate migrate-down migrate-create migrate-version reset run build
+.PHONY: help db-up db-down db-logs db-shell migrate migrate-down migrate-create migrate-version reset create-roles run build
 
 -include .env.example
+-include .env
 export
 
 POSTGRES_HOST     ?= localhost
@@ -38,6 +39,13 @@ db-logs:
 
 db-shell:
 	docker compose exec db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+
+create-roles:
+	docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
+		-v admin_pass="$$APP_ADMIN_PASSWORD" \
+		-v app_pass="$$APP_USER_PASSWORD" \
+		-v analyst_pass="$$ANALYST_USER_PASSWORD" \
+		-v ON_ERROR_STOP=1 < scripts/security/roles.sql
 
 migrate:
 	migrate -path migrations -database "$(DB_URL)" up
