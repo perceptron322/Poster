@@ -64,9 +64,6 @@ reset:
 	@sleep 3
 	$(MAKE) migrate
 
-create-roles:
-	docker compose exec -T db psql -U poster -d poster < scripts/security/roles.sql
-
 run:
 	go run cmd/api/main.go
 
