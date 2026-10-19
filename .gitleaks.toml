@@ -1,0 +1,34 @@
+title = "poster gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "credentials-in-url"
+description = "Пароль внутри URL подключения (postgres://user:password@host)"
+regex = '''[a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@'"]+:([^\s:/@'"$<{]+)@'''
+secretGroup = 1
+keywords = ["://"]
+
+[[rules]]
+id = "password-assignment"
+description = "Значение пароля/секрета/токена в env, yaml, json, Makefile, sh, md"
+regex = '''(?i)[a-z0-9_]*(?:password|passwd|secret|token|api_key)[a-z0-9_]*["']?[ \t]*(?::|=|:=)[ \t]*["']?([^\s"'$<{(=,;)?]+)'''
+secretGroup = 1
+keywords = ["password", "passwd", "secret", "token", "api_key"]
+path = '''(?i)(\.env[^/]*|\.ya?ml|\.json|\.toml|\.ini|\.properties|\.conf|\.sh|\.md|Makefile|Dockerfile)$'''
+
+[allowlist]
+description = "Плейсхолдеры"
+regexTarget = "secret"
+regexes = [
+  '''^change_me$''',
+  '''^\*+$''',
+  '''^x+$''',
+]
+paths = [
+  '''frontend/package-lock\.json''',
+  '''go\.sum''',
+  '''(^|/)node_modules/''',
+  '''frontend/(dist|\.angular)/''',
+]

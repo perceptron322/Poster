@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/url"
 	"os"
 	"sort"
 	"time"
@@ -18,7 +19,8 @@ import (
 type Config struct {
 	Seed       int64  `json:"seed"`
 	Mode       string `json:"mode"`
-	Dsn        string `json:"dsn"`
+	Database   string `json:"database"`
+	Dsn        string `json:"-"`
 	TicketRows int    `json:"ticket_rows"`
 }
 
@@ -34,9 +36,7 @@ func loadConfig(path string) Config {
 	if c.Seed == 0 {
 		c.Seed = 42
 	}
-	if c.Dsn == "" {
-		c.Dsn = "postgres://poster:secret@localhost:5433/poster?sslmode=disable"
-	}
+	c.Dsn = dsnFromEnv(c.Database)
 	switch c.Mode {
 	case "", "dev":
 		c.Mode = "dev"
@@ -51,6 +51,31 @@ func loadConfig(path string) Config {
 		log.Fatalf("mode must be dev|load, got %q", c.Mode)
 	}
 	return c
+}
+
+func dsnFromEnv(database string) string {
+	password := os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		log.Fatal("POSTGRES_PASSWORD не задан: cp .env.example .env в корне репозитория")
+	}
+	if database == "" {
+		database = envOr("POSTGRES_DB", "poster")
+	}
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(envOr("POSTGRES_USER", "poster"), password),
+		Host:     envOr("POSTGRES_HOST", "localhost") + ":" + envOr("POSTGRES_PORT", "5433"),
+		Path:     "/" + database,
+		RawQuery: "sslmode=disable",
+	}
+	return u.String()
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 func rngFor(seed int64, tags ...string) *rand.Rand {
@@ -406,7 +431,6 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 		status := pick(r, orderStatus, orderStatusW)
 		nTickets := 1 + r.Intn(5)
 
-	
 		daysBefore := int(math.Pow(r.Float64(), 2.0) * 30)
 		created := ev.Datetime.Add(-time.Duration(daysBefore) * 24 * time.Hour)
 		if created.After(time.Now().UTC()) {
