@@ -1,5 +1,13 @@
+# Секреты
 .env
+.env.*
+!.env.example
 *.local
+*.key
+*.pem
+*.crt
+.pgpass
+secrets/
 
 # Go
 bin/
