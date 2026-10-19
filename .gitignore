@@ -1,5 +1,15 @@
+# Секреты
 .env
+.env.*
+!.env.example
 *.local
+*.key
+*.pem
+*.crt
+.pgpass
+secrets/
+# Резервные копии БД: данные пользователей и хеши паролей
+backups/
 
 # Go
 bin/

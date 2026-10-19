@@ -10,15 +10,15 @@ services:
       - -c
       - ssl=on
       - -c
-      - ssl_cert_file=/var/lib/postgresql/data/server.crt
+      - ssl_cert_file=/var/lib/postgresql/tls/server.crt
       - -c
-      - ssl_key_file=/var/lib/postgresql/data/server.key
+      - ssl_key_file=/var/lib/postgresql/tls/server.key
       - -c
       - hba_file=/etc/postgresql/pg_hba.conf
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-poster}
       POSTGRES_USER: ${POSTGRES_USER:-poster}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан - скопируйте .env.example в .env}
     ports:
       - "5433:5432"
     volumes:
@@ -27,9 +27,10 @@ services:
       - ./scripts/postgres/entrypoint.sh:/scripts/entrypoint.sh:ro
       - ./scripts/postgres/generate-certs.sh:/scripts/generate-certs.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
-      interval: 5s
-      retries: 10
+      # По TCP: во время initdb временный сервер слушает только unix-сокет
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
+      interval: 2s
+      retries: 30
 
   replica:
     image: postgres:16
@@ -51,6 +52,23 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
       interval: 5s
       retries: 10
+
+  # Чистый экземпляр для проверки восстановления из бэкапа (make restore).
+  # Без именованного тома: make restore каждый раз начинает с пустого кластера.
+  restore:
+    image: postgres:16
+    container_name: poster-restore
+    profiles: ["restore"]
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-poster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан - выполните make env}
+    ports:
+      - "127.0.0.1:5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-poster} -d postgres"]
+      interval: 2s
+      retries: 30
 
 volumes:
   pgdata:
