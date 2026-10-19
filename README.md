@@ -3,9 +3,7 @@
 ## Быстрый старт
 
 ```bash
-cp .env.example .env
-make db-up
-make migrate
+make setup
 ```
 
 # [Спринт 1](docs/sprint-01.md)
