@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
-CERT_DIR="/var/lib/postgresql/data"
+CERT_DIR="/var/lib/postgresql/tls"
+
+mkdir -p "$CERT_DIR"
+chown postgres:postgres "$CERT_DIR"
 
 if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then
     echo "Generating self-signed PostgreSQL TLS certificate..."
