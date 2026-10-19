@@ -37,6 +37,9 @@ help:
 	@echo "  make print-db-url     — показать текущий DB_URL (без пароля)"
 	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
 	@echo "  make transactions     — выполнить транзакцию возврата билета из scripts/transactions/"
+	@echo "  make backup           — резервная копия БД и ролей в backups/"
+	@echo "  make restore          — восстановить бэкап в чистый PostgreSQL и сверить (file=...)"
+	@echo "  make restore-down     — удалить экземпляр восстановления"
 	@echo "  make secrets-scan     — проверить репозиторий на утёкшие секреты (gitleaks)"
 
 env:
@@ -149,9 +152,18 @@ pgstat-report-save:
 test-all: seed scenarios negatives property-tests
 	@echo "✅ Все сценарии и негативные тесты прошли"
 
+backup:
+	@sh scripts/backup/backup.sh
+
+restore:
+	@sh scripts/backup/restore.sh $(file)
+
+restore-down:
+	docker compose --profile restore rm -fsv restore
+
 GITLEAKS_IMAGE = ghcr.io/gitleaks/gitleaks:v8.21.2
 
 secrets-scan:
 	docker run --rm -v "$(CURDIR):/repo:z" $(GITLEAKS_IMAGE) git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact -v
 
-.PHONY: seed scenarios negatives property-tests test-all check-env secrets-scan print-db-url create-roles ha-lab-env
+.PHONY: seed scenarios negatives property-tests test-all check-env secrets-scan print-db-url create-roles ha-lab-env backup restore restore-down
