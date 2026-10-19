@@ -1,6 +1,5 @@
 .PHONY: help setup env db-up db-down db-logs db-shell migrate migrate-down migrate-create migrate-version reset run build
 
--include .env.example
 -include .env
 export
 
@@ -21,7 +20,8 @@ check-env:
 help:
 	@echo "Доступные команды:"
 	@echo "  make setup            — первый запуск: .env, pre-commit хук, БД и миграции"
-	@echo "  make env              — создать .env из .env.example со случайными паролями"
+	@echo "  make env              — создать/дополнить .env из .env.example случайными паролями"
+	@echo "  make ha-lab-env       — то же для scripts/ha-lab/.env"
 	@echo "  make db-up            — поднять PostgreSQL в Docker"
 	@echo "  make db-down          — остановить PostgreSQL"
 	@echo "  make db-logs          — логи контейнера БД"
@@ -39,14 +39,10 @@ help:
 	@echo "  make secrets-scan     — проверить репозиторий на утёкшие секреты (gitleaks)"
 
 env:
-	@if [ -f .env ]; then \
-		echo ".env уже есть, не трогаю"; \
-	else \
-		pw=$$(openssl rand -hex 16); \
-		sed "s/change_me/$$pw/g" .env.example > .env; \
-		chmod 600 .env; \
-		echo ".env создан из .env.example, change_me заменены случайным значением"; \
-	fi
+	@sh scripts/env-init.sh .env.example .env
+
+ha-lab-env:
+	@sh scripts/env-init.sh scripts/ha-lab/.env.example scripts/ha-lab/.env
 
 setup: env
 	@if command -v pre-commit >/dev/null; then pre-commit install; \
@@ -69,6 +65,9 @@ db-shell:
 	docker compose exec db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
 create-roles:
+	@if [ -z "$$APP_ADMIN_PASSWORD" ] || [ -z "$$APP_USER_PASSWORD" ] || [ -z "$$ANALYST_USER_PASSWORD" ]; then \
+		echo "Пароли ролей не заданы: выполните make env"; exit 1; \
+	fi
 	docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
 		-v admin_pass="$$APP_ADMIN_PASSWORD" \
 		-v app_pass="$$APP_USER_PASSWORD" \
@@ -156,4 +155,4 @@ GITLEAKS_IMAGE = ghcr.io/gitleaks/gitleaks:v8.21.2
 secrets-scan:
 	docker run --rm -v "$(CURDIR):/repo:Z" $(GITLEAKS_IMAGE) git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact -v
 
-.PHONY: seed scenarios negatives property-tests test-all check-env secrets-scan print-db-url
+.PHONY: seed scenarios negatives property-tests test-all check-env secrets-scan print-db-url create-roles ha-lab-env
