@@ -39,7 +39,7 @@ func databaseURL() (string, error) {
 		User:     url.UserPassword(envOr("POSTGRES_USER", "poster"), password),
 		Host:     envOr("POSTGRES_HOST", "localhost") + ":" + envOr("POSTGRES_PORT", "5433"),
 		Path:     "/" + envOr("POSTGRES_DB", "poster"),
-		RawQuery: "sslmode=" + envOr("POSTGRES_SSLMODE", "disable"),
+		RawQuery: "sslmode=" + envOr("POSTGRES_SSLMODE", "require"),
 	}
 	return u.String(), nil
 }

@@ -7,8 +7,9 @@ POSTGRES_HOST     ?= localhost
 POSTGRES_PORT     ?= 5433
 POSTGRES_DB       ?= poster
 POSTGRES_USER     ?= poster
+POSTGRES_SSLMODE  ?= require
 
-DB_URL ?= $(if $(DATABASE_URL),$(DATABASE_URL),postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable)
+DB_URL ?= $(if $(DATABASE_URL),$(DATABASE_URL),postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=$(POSTGRES_SSLMODE))
 
 .DEFAULT_GOAL := help
 
@@ -49,11 +50,10 @@ setup: env
 	else echo "pre-commit не установлен: pip install pre-commit && pre-commit install"; fi
 	@command -v migrate >/dev/null || { echo "нужен golang-migrate: https://github.com/golang-migrate/migrate"; exit 1; }
 	$(MAKE) db-up
-	@for i in $$(seq 1 30); do docker compose exec -T db pg_isready -q && break; sleep 1; done
 	$(MAKE) migrate
 
 db-up:
-	docker compose up -d db
+	docker compose up -d --wait db
 
 db-down:
 	docker compose down
@@ -86,8 +86,7 @@ migrate-version: check-env
 
 reset:
 	docker compose down -v
-	docker compose up -d db
-	@sleep 3
+	$(MAKE) db-up
 	$(MAKE) migrate
 
 run:
@@ -153,6 +152,6 @@ test-all: seed scenarios negatives property-tests
 GITLEAKS_IMAGE = ghcr.io/gitleaks/gitleaks:v8.21.2
 
 secrets-scan:
-	docker run --rm -v "$(CURDIR):/repo:Z" $(GITLEAKS_IMAGE) git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact -v
+	docker run --rm -v "$(CURDIR):/repo:z" $(GITLEAKS_IMAGE) git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact -v
 
 .PHONY: seed scenarios negatives property-tests test-all check-env secrets-scan print-db-url create-roles ha-lab-env
