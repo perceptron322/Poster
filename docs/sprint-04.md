@@ -69,3 +69,18 @@ make restore-down           # удалить экземпляр восстано
 Нюанс: текст CHECK-ограничений вида `IN (...)` после `pg_restore` отличается расстановкой
 приведений типов (`ARRAY[...]::text[]` → `ARRAY[(...)::text, ...]`) при том же смысле,
 поэтому `compare.sql` сравнивает определения ограничений без приведений типов и скобок.
+
+
+###RLS Test
+Добавлен скрипт test_rls.sh, который автоматически создает таблицу, включает RLS-политику и доказывает, что пользователи alice и bob видят только свои данные.
+
+cp .env.example .env
+
+mkdir -p ./archive
+sudo chown -R 999:999 ./archive
+sudo chmod 700 ./archive
+
+docker compose up -d
+
+chmod +x ./scripts/postgres/test_rls.sh
+./scripts/postgres/test_rls.sh
