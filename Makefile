@@ -41,6 +41,17 @@ help:
 	@echo "  make restore          — восстановить бэкап в чистый PostgreSQL и сверить (file=...)"
 	@echo "  make restore-down     — удалить экземпляр восстановления"
 	@echo "  make secrets-scan     — проверить репозиторий на утёкшие секреты (gitleaks)"
+	@echo ""
+	@echo "HA-стенд (scripts/ha-lab, primary :55432, replica :55433):"
+	@echo "  make ha-up            — поднять primary и replica, дождаться streaming"
+	@echo "  make ha-status        — роли узлов и состояние репликации"
+	@echo "  make ha-lsn           — LSN на узлах и отставание реплики"
+	@echo "  make ha-restart       — перезапустить replica и дождаться streaming"
+	@echo "  make ha-rebuild       — пересоздать replica из нового base backup"
+	@echo "  make ha-test          — автотесты репликации"
+	@echo "  make ha-logs          — последние логи узлов"
+	@echo "  make ha-down          — остановить стенд (данные сохраняются)"
+	@echo "  make ha-clean         — остановить стенд и удалить его тома"
 
 env:
 	@sh scripts/env-init.sh .env.example .env
@@ -167,3 +178,34 @@ secrets-scan:
 	docker run --rm -v "$(CURDIR):/repo:z" $(GITLEAKS_IMAGE) git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact -v
 
 .PHONY: seed scenarios negatives property-tests test-all check-env secrets-scan print-db-url create-roles ha-lab-env backup restore restore-down
+
+HA = sh scripts/ha-lab/ha.sh
+
+ha-up:
+	@$(HA) up
+
+ha-status:
+	@$(HA) status
+
+ha-lsn:
+	@$(HA) lsn
+
+ha-restart:
+	@$(HA) restart
+
+ha-rebuild:
+	@$(HA) rebuild
+
+ha-test:
+	@$(HA) test
+
+ha-logs:
+	@$(HA) logs
+
+ha-down:
+	@$(HA) down
+
+ha-clean:
+	@$(HA) clean
+
+.PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean

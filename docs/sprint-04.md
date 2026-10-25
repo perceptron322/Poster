@@ -84,3 +84,45 @@ docker compose up -d
 
 chmod +x ./scripts/postgres/test_rls.sh
 ./scripts/postgres/test_rls.sh
+
+## Репликация: тестовый HA-стенд
+
+Учебный стенд `scripts/ha-lab/`: primary (`127.0.0.1:55432`) и replica (`127.0.0.1:55433`). Тома и сеть у стенда свои, основную БД Poster на порту `5433` команды не трогают.
+Подробная диагностика отказов описана в `docs/runbooks/postgresql-replication.md`.
+
+Все команды запускаются из корня репозитория и вызывают `scripts/ha-lab/ha.sh`.
+Если `scripts/ha-lab/.env` ещё нет, скрипт создаёт его из `.env.example` со случайными
+паролями (как `make ha-lab-env`). Переменные стенда перекрывают переменные корневого `.env`,
+иначе `POSTGRES_DB=poster` из него подменил бы `course_app`.
+
+| Команда | Что делает |
+|---|---|
+| `make ha-up` | Поднимает primary и replica, ждёт `healthy` и состояния `streaming` в `pg_stat_replication`. При первом запуске replica создаётся через `pg_basebackup` |
+| `make ha-status` | Проверка репликации: `01-primary-status.sql` на primary (`pg_is_in_recovery() = f`, `pg_stat_replication`) и `03-replica-status.sql` на replica (`pg_is_in_recovery() = t`, `pg_stat_wal_receiver`) |
+| `make ha-lsn` | LSN: на primary — `pg_current_wal_lsn()`, `sent/write/flush/replay_lsn`, отставание `replay_lag_bytes` и `replay_lag`; на replica — `receive_lsn`, `replay_lsn`, неприменённые байты и время последней применённой транзакции |
+| `make ha-restart` | Перезапускает replica, ждёт возобновления `streaming` и показывает LSN |
+| `make ha-rebuild` | Пересоздаёт replica с нуля: удаляет контейнер и том `sprint04_replica_data`, делает новый `pg_basebackup`. Нужен, если реплика отстала и WAL на primary уже удалены (`wal_keep_size=256MB`) |
+| `make ha-test` | Автотесты репликации, при ошибке завершается с кодом 1 |
+| `make ha-logs` | Последние 100 строк логов primary и replica |
+| `make ha-down` | Останавливает стенд, тома с данными сохраняются |
+| `make ha-clean` | Останавливает стенд (вместе с узлом `restore`) и удаляет его тома |
+
+Что проверяет `make ha-test`:
+
+1. Роли узлов: primary не в recovery, replica в recovery (hot standby).
+2. `course_replica` в `pg_stat_replication` в состоянии `streaming/async`.
+3. Запись в `app.replication_probe` на primary появляется на replica: тест ждёт, пока
+   `pg_last_wal_replay_lsn()` реплики дойдёт до LSN после `INSERT`, и ищет запись по маркеру.
+4. `INSERT` на replica отклоняется с ошибкой `read-only transaction`.
+5. Число строк, максимальный `id` и md5 маркеров `app.replication_probe` на узлах совпадают,
+   дубликатов маркеров нет.
+
+Типичный прогон:
+
+```bash
+make ha-up        # поднять стенд
+make ha-test      # убедиться, что репликация работает
+make ha-lsn       # посмотреть LSN и отставание
+make ha-restart   # перезапустить реплику, затем снова make ha-test
+make ha-down      # остановить стенд
+```
