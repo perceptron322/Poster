@@ -2,18 +2,60 @@ services:
   db:
     image: postgres:16
     container_name: poster-db
+    entrypoint: ["/bin/sh", "/scripts/entrypoint.sh"]
     command:
       - postgres
       - -c
       - shared_preload_libraries=pg_stat_statements
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/tls/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/tls/server.key
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f
+      - -c
+      - wal_keep_size=512MB
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-poster}
       POSTGRES_USER: ${POSTGRES_USER:-poster}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./archive:/var/lib/postgresql/archive
+      - ./config/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./scripts/postgres/entrypoint.sh:/scripts/entrypoint.sh:ro
+      - ./scripts/postgres/generate-certs.sh:/scripts/generate-certs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
+      interval: 5s
+      retries: 10
+
+  replica:
+    image: postgres:16
+    container_name: poster-replica
+    entrypoint: ["/bin/bash", "/scripts/replica-entrypoint.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?Set REPLICATOR_PASSWORD in .env}
+    ports:
+      - "5434:5432"
+    volumes:
+      - replicadata:/var/lib/postgresql/data
+      - ./config/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./scripts/postgres/replica-entrypoint.sh:/scripts/replica-entrypoint.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poster} -d ${POSTGRES_DB:-poster}"]
       interval: 5s
@@ -21,3 +63,4 @@ services:
 
 volumes:
   pgdata:
+  replicadata:

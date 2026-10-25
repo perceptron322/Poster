@@ -270,8 +270,9 @@ GROUP BY e.event_id, l.capacity;
 Данные создаются генератором (`scripts/seed`) в режиме `load` с `ticket_rows = 300000`:
 
 ```bash
-docker compose exec -T db createdb -U poster poster_bench_load
-migrate -path migrations -database "postgres://poster:secret@localhost:5433/poster_bench_load?sslmode=disable" up
+set -a; source .env; set +a   # POSTGRES_* из локального .env
+docker compose exec -T db createdb -U "$POSTGRES_USER" poster_bench_load
+migrate -path migrations -database "postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/poster_bench_load?sslmode=disable" up
 cd scripts/seed && go run generate.go -config ../optimization/seed_config.json
 ```
 

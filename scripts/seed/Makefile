@@ -1,4 +1,9 @@
-PSQL = docker compose -f ../../docker-compose.yml exec -T db psql -U poster -d poster
+-include ../../.env
+export
+POSTGRES_USER ?= poster
+POSTGRES_DB   ?= poster
+
+PSQL = docker compose -f ../../docker-compose.yml exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
 .PHONY: run dev load measure verify clean
 
