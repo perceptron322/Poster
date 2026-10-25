@@ -13,3 +13,6 @@
 91c7249f5e8be4d9bf54ff71072157de98239677:scripts/optimization/seed_config.json:credentials-in-url:4
 9795b9bbab5ff597c91df54d0e5076aa9a68d736:docs/sprint-03.md:credentials-in-url:44
 ebcd51d54f5b71e2b943edd2a357de44a24acb1c:.env.example:credentials-in-url:8
+55f6c4f6fe86744cfa376d744f67edd70b29a7f5:.env.example:credentials-in-url:8
+e9e99d89958e67a726c7354d56add9384e3be332:docker-compose.yml:password-assignment:29
+0cdc507610b5d88d15fe767a6cad39dc08aca103:docker-compose.yml:password-assignment:29
