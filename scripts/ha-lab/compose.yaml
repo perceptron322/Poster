@@ -1,86 +1,130 @@
 name: sprint-04-postgresql
 
 services:
-  primary:
-    image: postgres:17-bookworm
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --initial-cluster=etcd=http://etcd:2380
+      - --initial-cluster-state=new
+    volumes:
+      - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - database_network
+    restart: unless-stopped
+
+  patroni1:
+    build:
+      context: ./patroni
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Copy .env.example to .env and set POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
-      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+      PATRONI_NAME: patroni1
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
       REPLICATION_USER: ${REPLICATION_USER:?Set REPLICATION_USER in .env}
       REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:?Set REPLICATION_PASSWORD in .env}
       APPLICATION_USER: ${APPLICATION_USER:?Set APPLICATION_USER in .env}
       APPLICATION_PASSWORD: ${APPLICATION_PASSWORD:?Set APPLICATION_PASSWORD in .env}
       ANALYST_USER: ${ANALYST_USER:?Set ANALYST_USER in .env}
       ANALYST_PASSWORD: ${ANALYST_PASSWORD:?Set ANALYST_PASSWORD in .env}
-    command:
-      - postgres
-      - -c
-      - wal_level=replica
-      - -c
-      - max_wal_senders=10
-      - -c
-      - wal_keep_size=256MB
-      - -c
-      - hot_standby=on
-      - -c
-      - password_encryption=scram-sha-256
-    ports:
-      - "127.0.0.1:${PRIMARY_PORT:-55432}:5432"
     volumes:
-      - primary_data:/var/lib/postgresql/data
-      - ./primary/init:/docker-entrypoint-initdb.d:ro
-      - ./sql:/course/sql:ro
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
-    networks:
-      - database_network
-
-  replica:
-    image: postgres:17-bookworm
-    entrypoint:
-      - /bin/sh
-      - /usr/local/bin/replica-entrypoint.sh
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Copy .env.example to .env and set POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
-      PRIMARY_HOST: primary
-      PRIMARY_DB_PORT: 5432
-      REPLICATION_USER: ${REPLICATION_USER:?Set REPLICATION_USER in .env}
-      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:?Set REPLICATION_PASSWORD in .env}
-      REPLICA_APPLICATION_NAME: course_replica
-    ports:
-      - "127.0.0.1:${REPLICA_PORT:-55433}:5432"
-    volumes:
-      - replica_data:/var/lib/postgresql/data
-      - ./replica/replica-entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+      - patroni1_data:/var/lib/postgresql/data
+      - ./patroni/config/patroni.yml:/etc/patroni/patroni.yml.template:ro
       - ./sql:/course/sql:ro
     depends_on:
-      primary:
+      etcd:
         condition: service_healthy
     healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" && [ "$$(psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc 'SELECT pg_is_in_recovery()')" = "t" ]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health >/dev/null"]
       interval: 5s
       timeout: 3s
-      retries: 20
-      start_period: 15s
+      retries: 30
+      start_period: 30s
+    networks:
+      - database_network
+    restart: unless-stopped
+
+  patroni2:
+    build:
+      context: ./patroni
+    environment:
+      PATRONI_NAME: patroni2
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
+      REPLICATION_USER: ${REPLICATION_USER:?Set REPLICATION_USER in .env}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:?Set REPLICATION_PASSWORD in .env}
+      APPLICATION_USER: ${APPLICATION_USER:?Set APPLICATION_USER in .env}
+      APPLICATION_PASSWORD: ${APPLICATION_PASSWORD:?Set APPLICATION_PASSWORD in .env}
+      ANALYST_USER: ${ANALYST_USER:?Set ANALYST_USER in .env}
+      ANALYST_PASSWORD: ${ANALYST_PASSWORD:?Set ANALYST_PASSWORD in .env}
+    volumes:
+      - patroni2_data:/var/lib/postgresql/data
+      - ./patroni/config/patroni.yml:/etc/patroni/patroni.yml.template:ro
+      - ./sql:/course/sql:ro
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    networks:
+      - database_network
+    restart: unless-stopped
+
+  haproxy:
+    image: haproxy:3.2
+    ports:
+      - "127.0.0.1:${PRIMARY_PORT:-55432}:5432"
+      - "127.0.0.1:${REPLICA_PORT:-55433}:5433"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - patroni1
+      - patroni2
+    networks:
+      - database_network
+    restart: unless-stopped
+
+  init-db:
+    image: postgres:17-bookworm
+    profiles: ["tools"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
+      APPLICATION_USER: ${APPLICATION_USER:?Set APPLICATION_USER in .env}
+      APPLICATION_PASSWORD: ${APPLICATION_PASSWORD:?Set APPLICATION_PASSWORD in .env}
+      ANALYST_USER: ${ANALYST_USER:?Set ANALYST_USER in .env}
+      ANALYST_PASSWORD: ${ANALYST_PASSWORD:?Set ANALYST_PASSWORD in .env}
+    entrypoint: ["/bin/sh", "/usr/local/bin/init-db.sh"]
+    volumes:
+      - ./patroni/init-db.sh:/usr/local/bin/init-db.sh:ro
+    depends_on:
+      patroni1:
+        condition: service_healthy
+      patroni2:
+        condition: service_healthy
     networks:
       - database_network
 
   restore:
     image: postgres:17-bookworm
-    profiles:
-      - restore
+    profiles: ["restore"]
     environment:
       POSTGRES_DB: ${RESTORE_DB:-course_app_restored}
       POSTGRES_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env}
@@ -92,9 +136,7 @@ services:
       - restore_data:/var/lib/postgresql/data
       - ./sql:/course/sql:ro
     healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -103,10 +145,12 @@ services:
       - database_network
 
 volumes:
-  primary_data:
-    name: sprint04_primary_data
-  replica_data:
-    name: sprint04_replica_data
+  etcd_data:
+    name: sprint04_etcd_data
+  patroni1_data:
+    name: sprint04_patroni1_data
+  patroni2_data:
+    name: sprint04_patroni2_data
   restore_data:
     name: sprint04_restore_data
 
