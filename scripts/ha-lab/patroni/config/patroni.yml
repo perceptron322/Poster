@@ -32,15 +32,6 @@ bootstrap:
   pg_hba:
     - host replication replicator 0.0.0.0/0 scram-sha-256
     - host all all 0.0.0.0/0 scram-sha-256
-  users:
-    course_admin:
-      password: ${POSTGRES_ADMIN_PASSWORD}
-      options:
-        - superuser
-    replicator:
-      password: ${REPLICATION_PASSWORD}
-      options:
-        - replication
 
 postgresql:
   listen: 0.0.0.0:5432

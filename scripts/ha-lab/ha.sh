@@ -28,9 +28,12 @@ CURL_TIMEOUT=3
 SQL_TIMEOUT=10
 WAIT_ATTEMPTS=60
 WAIT_INTERVAL=2
+COMPOSE_TIMEOUT=30
+# Сборка образа и ожидание healthcheck занимают заметно дольше.
+UP_TIMEOUT=600
 
 compose() {
-    timeout 30s docker compose \
+    timeout "${COMPOSE_TIMEOUT}s" docker compose \
         -f "$dir/compose.yaml" \
         --env-file "$dir/.env" \
         "$@"
@@ -146,7 +149,9 @@ wait_streaming() {
 }
 
 cmd_up() {
+    COMPOSE_TIMEOUT=$UP_TIMEOUT
     compose up -d --build --wait etcd patroni1 patroni2 haproxy
+    COMPOSE_TIMEOUT=30
 
     wait_roles
 
