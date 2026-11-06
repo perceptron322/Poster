@@ -14,4 +14,4 @@ WHERE dbid = (
 )
 AND query NOT LIKE '%pg_stat_statements_reset%'
 ORDER BY total_exec_time DESC
-LIMIT 10;
+LIMIT :limit OFFSET :offset;

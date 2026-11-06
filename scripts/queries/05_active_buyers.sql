@@ -16,8 +16,8 @@ SELECT
 FROM users u
 JOIN user_order_counts uoc ON u.user_id = uoc.user_id
 WHERE uoc.order_count > 1
-ORDER BY uoc.total_spent DESC
-LIMIT 10;
+ORDER BY uoc.total_spent DESC, u.user_id ASC
+LIMIT :limit OFFSET :offset;
 
 -- Бизнес-задача:
 --   Найти активных покупателей, оценив их по количеству успешных заказов и общей сумме затрат.

@@ -9,5 +9,5 @@ SELECT
 FROM location_bookings lb
 JOIN locations l ON lb.location_id = l.location_id
 JOIN events e ON lb.event_id = e.event_id
-ORDER BY l.location_id, lb.start_time
-LIMIT 10;
+ORDER BY l.location_id, lb.start_time, lb.booking_id ASC
+LIMIT :limit OFFSET :offset;

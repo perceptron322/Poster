@@ -239,7 +239,8 @@ seed-gen: seed-vendor seed-clean
 queries-head:
 	@for f in scripts/queries/*.sql; do \
 	    echo "===== $$f ====="; \
-	    $(PSQL) < $$f 2>&1 | head -15; \
+	    docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
+       -v ON_ERROR_STOP=1 -v limit=10 -v offset=0 -P pager=off < $$f 2>&1; \
 	    echo ""; \
 	done
 

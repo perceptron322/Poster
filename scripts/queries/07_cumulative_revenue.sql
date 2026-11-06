@@ -13,4 +13,4 @@ SELECT
     SUM(daily_sum) OVER (ORDER BY order_date ROWS UNBOUNDED PRECEDING) AS cumulative_revenue
 FROM daily_revenue
 ORDER BY order_date
-LIMIT 10;
+LIMIT :limit OFFSET :offset;

@@ -17,8 +17,8 @@ SELECT
     total_revenue,
     RANK() OVER (PARTITION BY type ORDER BY total_revenue DESC) AS revenue_rank
 FROM event_revenue
-ORDER BY type, revenue_rank
-LIMIT 10;
+ORDER BY type, revenue_rank, event_id ASC
+LIMIT :limit OFFSET :offset;
 
 -- Бизнес-задача:
 --   Ранжировать мероприятия по выручке внутри каждой категории (например, найти самый прибыльный концерт и самую прибыльную лекцию отдельно).

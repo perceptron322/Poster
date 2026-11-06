@@ -9,13 +9,13 @@ FROM events e
 JOIN locations l ON e.location_id = l.location_id
 JOIN users u ON e.user_id = u.user_id
 WHERE e.status = 'published' AND e.datetime > NOW()
-ORDER BY e.datetime ASC
-LIMIT 10;
+ORDER BY e.datetime ASC, e.event_id ASC
+LIMIT :limit OFFSET :offset;
 
 -- Бизнес-задача:
 --   Показать каталог опубликованных предстоящих мероприятий.
 --
--- Параметры:
+-- Параметры: 
 --   Нет. (Можно добавить фильтр по типу, например: AND e.type = 'concert').
 --
 -- Что делает:

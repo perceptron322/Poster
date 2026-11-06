@@ -8,5 +8,5 @@ SELECT
 FROM orders o
 JOIN users u ON o.user_id = u.user_id
 WHERE o.status = 'paid'
-ORDER BY o.user_id, o.created_at
-LIMIT 10;
+ORDER BY o.user_id, o.created_at, o.order_id ASC
+LIMIT :limit OFFSET :offset;

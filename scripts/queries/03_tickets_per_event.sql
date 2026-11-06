@@ -8,8 +8,8 @@ JOIN orders o ON e.event_id = o.event_id
 JOIN tickets t ON o.order_id = t.order_id
 WHERE t.status IN ('valid', 'used')
 GROUP BY e.event_id, e.title
-ORDER BY total_revenue DESC
-LIMIT 10;
+ORDER BY total_revenue DESC, e.event_id ASC
+LIMIT :limit OFFSET :offset;
 
 -- Бизнес-задача:
 --   Найти самые популярные и прибыльные мероприятия по числу проданных билетов.

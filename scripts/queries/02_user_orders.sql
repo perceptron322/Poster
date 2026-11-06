@@ -8,8 +8,8 @@ SELECT
 FROM orders o
 JOIN events e ON o.event_id = e.event_id
 WHERE o.user_id = 2 -- параметр: ID пользователя (для примера взят пользователь 2, у него больше всего заказов)
-ORDER BY o.created_at DESC
-LIMIT 10;
+	ORDER BY o.created_at DESC, o.order_id DESC
+LIMIT :limit OFFSET :offset;
 
 -- Бизнес-задача:
 --   Показать историю заказов конкретного покупателя.
