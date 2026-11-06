@@ -89,7 +89,10 @@ create-roles:
 		-v ON_ERROR_STOP=1 < scripts/security/roles.sql
 
 migrate: check-env
-	@migrate -path migrations -database "$(DB_URL)" up
+	@for f in migrations/*.up.sql; do \
+	  echo "== $$f =="; \
+	  cat "$$f" | docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB); \
+	done
 
 migrate-create:
 	@if [ -z "$(name)" ]; then echo "Использование: make migrate-create name=create_users"; exit 1; fi
@@ -208,4 +211,39 @@ ha-down:
 ha-clean:
 	@$(HA) clean
 
-.PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean
+seed-clean:
+	$(PSQL) -c 'TRUNCATE tickets, orders, location_bookings, events, locations, users RESTART IDENTITY CASCADE;'
+
+migrate-if-empty: check-env
+	@exists=$$(docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -tAc \
+	  "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='users';"); \
+	if [ "$$exists" = "1" ]; then \
+	  echo "== migrations: таблицы уже есть, пропускаем =="; \
+	else \
+	  $(MAKE) migrate; \
+	fi
+
+seed-vendor:
+	go mod tidy
+	go mod vendor
+
+seed-gen: seed-vendor seed-clean
+	docker run --rm --network poster_default \
+	  -v "$(CURDIR):/src" -w /src/scripts/seed \
+	  -e POSTGRES_HOST=db -e POSTGRES_PORT=5432 \
+	  -e POSTGRES_USER=$(POSTGRES_USER) -e POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
+	  -e POSTGRES_DB=$(POSTGRES_DB) -e POSTGRES_SSLMODE=require \
+	  -e GOFLAGS=-mod=vendor \
+	  golang:1.27 sh -c "go run generate.go -config config.json"
+
+queries-head:
+	@for f in scripts/queries/*.sql; do \
+	    echo "===== $$f ====="; \
+	    $(PSQL) < $$f 2>&1 | head -15; \
+	    echo ""; \
+	done
+
+sprint_5_request_8: db-up migrate-if-empty seed-gen queries-head
+	@echo "✅ Готово: БД поднята, миграции применены, seed сгенерирован, 8 запросов прогнаны."
+
+.PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean seed-clean

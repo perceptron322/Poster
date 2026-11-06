@@ -1,24 +1,32 @@
-SELECT
-    e.title,
-    SUM(t.price) AS выручка
-FROM events e
-JOIN orders  o ON o.event_id = e.event_id
-JOIN tickets t ON t.order_id = o.order_id
-WHERE t.status = 'valid'
-GROUP BY e.event_id, e.title
-ORDER BY выручка DESC
+WITH event_revenue AS (
+    SELECT 
+        e.type,
+        e.event_id,
+        e.title,
+        SUM(t.price) AS total_revenue
+    FROM events e
+    JOIN orders o ON e.event_id = o.event_id
+    JOIN tickets t ON o.order_id = t.order_id
+    WHERE t.status IN ('valid', 'used')
+    GROUP BY e.type, e.event_id, e.title
+)
+SELECT 
+    type,
+    event_id,
+    title,
+    total_revenue,
+    RANK() OVER (PARTITION BY type ORDER BY total_revenue DESC) AS revenue_rank
+FROM event_revenue
+ORDER BY type, revenue_rank
 LIMIT 10;
 
 -- Бизнес-задача:
---   Найти самые прибыльные мероприятия.
+--   Ранжировать мероприятия по выручке внутри каждой категории (например, найти самый прибыльный концерт и самую прибыльную лекцию отдельно).
 --
 -- Параметры:
---   Нет. LIMIT 10 — для читаемости отчёта.
+--   Нет.
 --
 -- Что делает:
---   Соединяет 3 таблицы (events, orders, tickets),
---   группирует по мероприятию, суммирует цену активных билетов.
---   Сортирует по убыванию, берёт топ-10.
---
--- Почему WHERE t.status = 'valid':
---   Возвращённые и отменённые билеты выручку не приносят.
+--   1. CTE `event_revenue`: соединяет 3 таблицы, фильтрует валидные билеты и агрегирует (SUM) общую выручку по каждому мероприятию в разрезе типов.
+--   2. Основной запрос: использует оконную функцию RANK() OVER (PARTITION BY type ORDER BY total_revenue DESC) для присвоения места (ранга) внутри каждой группы типа мероприятия.
+--   3. Сортирует финальный вывод по типу и рангу для удобного чтения.
