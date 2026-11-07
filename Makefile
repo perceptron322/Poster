@@ -36,6 +36,7 @@ help:
 	@echo "  make build            — собрать бинарник"
 	@echo "  make print-db-url     — показать текущий DB_URL (без пароля)"
 	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
+	@echo "  make queries-check    — автоматические проверки результатов запросов"
 	@echo "  make transactions     — выполнить транзакцию возврата билета из scripts/transactions/"
 	@echo "  make backup           — резервная копия БД и ролей в backups/"
 	@echo "  make restore          — восстановить бэкап в чистый PostgreSQL и сверить (file=...)"
@@ -144,6 +145,19 @@ queries:
 	    $(PSQL) < $$f; \
 	done
 
+queries-check:
+	@fail=0; \
+	for f in scripts/query_checks/*.sql; do \
+		echo "== $$f =="; \
+		if $(PSQL) -1 -f "$$f" < /dev/null >/dev/null 2>&1 || \
+		   $(PSQL) -1 < "$$f" >/dev/null 2>&1; then \
+			echo "  ✅ OK"; \
+		else \
+			echo "  ❌ ПРОВАЛ"; fail=1; \
+		fi; \
+	done; \
+	exit $$fail
+
 transactions:
 	$(PSQL) < scripts/transactions/refund_one_ticket.sql
 
@@ -244,7 +258,7 @@ queries-head:
 	    echo ""; \
 	done
 
-sprint_5_request_8: db-up migrate-if-empty seed-gen queries-head
+sprint_5_request_8: db-up migrate-if-empty seed-gen queries-head queries-check
 	@echo "✅ Готово: БД поднята, миграции применены, seed сгенерирован, 8 запросов прогнаны."
 
 .PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean seed-clean
