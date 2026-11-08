@@ -37,6 +37,16 @@ help:
 	@echo "  make print-db-url     — показать текущий DB_URL (без пароля)"
 	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
 	@echo "  make queries-check    — автоматические проверки результатов запросов"
+	@echo ""
+	@echo "MongoDB, документная модель (:27018):"
+	@echo "  make mongo-up         — всё сразу: PG + MongoDB, seed из PG, запросы и проверки"
+	@echo "  make mongo-shell      — mongosh внутри контейнера"
+	@echo "  make mongo-schema     — коллекции, валидаторы \$$jsonSchema, индексы"
+	@echo "  make mongo-seed       — сгенерировать документы по данным PostgreSQL"
+	@echo "  make mongo-queries    — демо-запросы scripts/mongo/queries/"
+	@echo "  make mongo-check      — проверки модели и сверка PostgreSQL ↔ MongoDB"
+	@echo "  make mongo-start      — только поднять контейнер MongoDB"
+	@echo ""
 	@echo "  make transactions     — выполнить транзакцию возврата билета из scripts/transactions/"
 	@echo "  make backup           — резервная копия БД и ролей в backups/"
 	@echo "  make restore          — восстановить бэкап в чистый PostgreSQL и сверить (file=...)"
@@ -262,3 +272,46 @@ sprint_5_request_8: db-up migrate-if-empty seed-gen queries-head queries-check
 	@echo "✅ Готово: БД поднята, миграции применены, seed сгенерирован, 8 запросов прогнаны."
 
 .PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean seed-clean
+
+# --- MongoDB: документная модель (Sprint 5) ---
+# Учётные данные берутся из окружения контейнера, на хосте пароль в командной строке не светится.
+MONGOSH = docker compose exec -T mongo sh -c 'mongosh --quiet \
+	-u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
+	--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" "$$@"' mongosh
+
+mongo-start:
+	docker compose up -d --wait mongo
+
+mongo-shell:
+	docker compose exec mongo sh -c 'mongosh -u "$$MONGO_INITDB_ROOT_USERNAME" \
+	  -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin "$$MONGO_INITDB_DATABASE"'
+
+mongo-schema:
+	$(MONGOSH) /scripts/mongo/01_schema.js
+
+# Seed берёт event_id, снимок событий и покупателей из PostgreSQL (источник истины).
+mongo-seed: mongo-schema
+	$(PSQL) -tA < scripts/mongo/pg_export.sql | docker compose exec -T mongo sh -c 'cat > /tmp/pg_export.json'
+	$(MONGOSH) /scripts/mongo/02_seed.js
+
+mongo-queries:
+	@for f in scripts/mongo/queries/*.js; do \
+		echo "===== $$f ====="; \
+		$(MONGOSH) "/$$f" || exit 1; \
+		echo ""; \
+	done
+
+mongo-check:
+	@fail=0; \
+	for f in scripts/mongo/checks/*.js; do \
+		echo "== $$f =="; \
+		if $(MONGOSH) "/$$f"; then echo "  ✅ OK"; else echo "  ❌ ПРОВАЛ"; fail=1; fi; \
+	done; \
+	echo "== scripts/mongo/cross_check.sh (PostgreSQL ↔ MongoDB) =="; \
+	if sh scripts/mongo/cross_check.sh; then echo "  ✅ OK"; else echo "  ❌ ПРОВАЛ"; fail=1; fi; \
+	exit $$fail
+
+mongo-up: db-up mongo-start migrate-if-empty mongo-seed mongo-queries mongo-check
+	@echo "✅ Готово: PostgreSQL и MongoDB подняты, документы сгенерированы из PG, запросы и проверки прогнаны."
+
+.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-queries mongo-check
