@@ -277,25 +277,27 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 	defer stmt.Close()
 
 	now := time.Now().UTC()
-	windowStart := now.AddDate(0, 0, -30)
-	windowSecs := int64(60 * 24 * 3600)
+	// Окно событий: от 60 дней в прошлом до 60 дней в будущем
+	windowStart := now.AddDate(0, 0, -60)
+	windowEnd := now.AddDate(0, 0, 60)
+	windowSecs := int64(windowEnd.Sub(windowStart).Seconds())
 
 	rows := make([]eventRow, 0, n)
 	for i := 0; i < n; i++ {
-		frac := math.Pow(r.Float64(), 2.0)
-		start := windowStart.Add(
-			time.Duration(frac*float64(windowSecs)) * time.Second,
-		)
+		// Равномерное распределение по всему окну
+		offset := r.Int63n(windowSecs)
+		start := windowStart.Add(time.Duration(offset) * time.Second)
 
 		durMin := 60 + r.Intn(120)
 		dur := time.Duration(durMin) * time.Minute
 		durStr := fmt.Sprintf("%d minutes", durMin)
 
-		status := "published"
+		// Логика статуса: прошедшие -> finished/cancelled, будущие -> published/cancelled
+		var status string
 		if start.Before(now) {
-			status = "finished"
+			status = pick(r, []string{"finished", "cancelled"}, []float64{90, 10})
 		} else {
-			status = pick(r, eventStatus[:2], eventStatusW[:2])
+			status = pick(r, []string{"published", "cancelled"}, []float64{90, 10})
 		}
 
 		price := math.Round(math.Exp(r.NormFloat64()*0.7+6.0)*100) / 100
@@ -312,7 +314,6 @@ func genEventsWithMeta(tx *sql.Tx, cfg Config, userIDs, locIDs []int64) []eventR
 			"description "+fmt.Sprint(i),
 			fmt.Sprintf("http://img/%d.jpg", i),
 			start, durStr,
-			// [З3-веса] было types[r.Intn(len(types))], стало pick
 			pick(r, eventTypes, eventTypeW),
 			price, status, org, loc,
 		).Scan(&id)
@@ -414,6 +415,7 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 	defer tkStmt.Close()
 
 	ordersTotal, ticketsTotal := 0, 0
+	now := time.Now().UTC()
 
 	for i := 0; i < targetOrders; i++ {
 		var ev eventRow
@@ -423,7 +425,6 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 			ev = events[r.Intn(len(events))]
 		}
 
-		// [З3-скип] Нельзя купить билет на отменённое событие.
 		if ev.Status == "cancelled" {
 			continue
 		}
@@ -431,11 +432,28 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 		status := pick(r, orderStatus, orderStatusW)
 		nTickets := 1 + r.Intn(5)
 
-		daysBefore := int(math.Pow(r.Float64(), 2.0) * 30)
-		created := ev.Datetime.Add(-time.Duration(daysBefore) * 24 * time.Hour)
-		if created.After(time.Now().UTC()) {
-			created = time.Now().UTC()
+		// Логика даты заказа:
+		// 1. Заказ должен быть создан ДО начала события (минимум за час).
+		maxCreated := ev.Datetime.Add(-time.Hour)
+		// 2. Заказ не может быть создан в будущем.
+		if maxCreated.After(now) {
+			maxCreated = now
 		}
+
+		// Окно создания заказов: последние 90 дней от текущего момента
+		minCreated := now.AddDate(0, 0, -90)
+		if minCreated.After(maxCreated) {
+			// Если событие было очень давно, сдвигаем окно назад относительно события
+			minCreated = maxCreated.AddDate(0, 0, -30)
+		}
+
+		windowSecs := int64(maxCreated.Sub(minCreated).Seconds())
+		if windowSecs <= 0 {
+			windowSecs = 1
+		}
+		offset := r.Int63n(windowSecs)
+		created := minCreated.Add(time.Duration(offset) * time.Second)
+
 		total := ev.Price * float64(nTickets)
 
 		var orderID int64
@@ -448,9 +466,6 @@ func genOrdersAndTickets(tx *sql.Tx, cfg Config, userIDs []int64, events []event
 		ordersTotal++
 
 		for j := 0; j < nTickets; j++ {
-			// [З3-веса] Статус билета согласован со статусом заказа.
-			// Для paid — pick между valid|used по весам,
-			// для остальных — жёсткая связка.
 			ts := "valid"
 			switch status {
 			case "cancelled":

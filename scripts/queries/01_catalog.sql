@@ -1,23 +1,25 @@
-SELECT
+SELECT 
+    e.event_id,
     e.title,
     e.datetime,
-    e.ticket_price,
-    l.name  AS площадка,
-    u.name  AS организатор
+    l.name AS location_name,
+    l.address,
+    u.name AS organizer_name
 FROM events e
-JOIN locations l ON l.location_id = e.location_id
-JOIN users     u ON u.user_id     = e.user_id
-WHERE e.status = 'published'
-ORDER BY e.datetime
-LIMIT 20;
+JOIN locations l ON e.location_id = l.location_id
+JOIN users u ON e.user_id = u.user_id
+WHERE e.status = 'published' AND e.datetime > NOW()
+ORDER BY e.datetime ASC, e.event_id ASC
+LIMIT :limit OFFSET :offset;
 
 -- Бизнес-задача:
---   Показать каталог опубликованных мероприятий.
+--   Показать каталог опубликованных предстоящих мероприятий.
 --
--- Параметры:
---   Нет. Можно добавить фильтр по типу: AND e.type = 'concert'.
+-- Параметры: 
+--   Нет. (Можно добавить фильтр по типу, например: AND e.type = 'concert').
 --
 -- Что делает:
---   Соединяет 3 таблицы (events, locations, users).
---   Сортирует по дате, показывает 20 ближайших.
+--   1. Соединяет 3 таблицы (events, locations, users) через JOIN.
+--   2. Фильтрует только опубликованные события, дата которых больше текущего момента (NOW()).
+--   3. Сортирует результат по дате проведения по возрастанию (от ближайших к дальним).
 --
