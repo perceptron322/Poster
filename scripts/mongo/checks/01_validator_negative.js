@@ -14,11 +14,21 @@ const marker = new Date('1970-01-02T00:00:00Z');   // created_at мусорны�
 
 try {
   expectReject('рейтинг отзыва 6', () => db.reviews.insertOne({
-    event_id: base._id, user_id: 1, rating: 6, created_at: marker,
+    schemaVersion: NumberInt(1),
+    event_id: base._id,
+    user_id: 1,
+    rating: 6,
+    created_at: marker,
   }));
   expectReject('второй отзыв того же пользователя на событие', () => {
     const r = db.reviews.findOne();
-    db.reviews.insertOne({ event_id: r.event_id, user_id: r.user_id, rating: 3, created_at: marker });
+    db.reviews.insertOne({
+      schemaVersion: NumberInt(1),
+      event_id: r.event_id,
+      user_id: r.user_id,
+      rating: 3,
+      created_at: marker,
+    });
   }, [11000]);
   expectReject('фестиваль без stages', () => db.event_pages.insertOne(fresh({
     event: { ...base.event, type: 'festival' }, details: {},

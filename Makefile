@@ -42,6 +42,9 @@ help:
 	@echo "  make mongo-up         — всё сразу: PG + MongoDB, seed из PG, запросы и проверки"
 	@echo "  make mongo-shell      — mongosh внутри контейнера"
 	@echo "  make mongo-schema     — коллекции, валидаторы \$$jsonSchema, индексы"
+	@echo "  make mongo-migrate    — миграция event_pages V1 -> V2"
+	@echo "  make mongo-migrate-performers-reviews — добавить schemaVersion для performers и reviews"
+	@echo "  make mongo-verify     — проверка версий всех трёх коллекций"
 	@echo "  make mongo-seed       — сгенерировать документы по данным PostgreSQL"
 	@echo "  make mongo-queries    — демо-запросы scripts/mongo/queries/"
 	@echo "  make mongo-check      — проверки модели и сверка PostgreSQL ↔ MongoDB"
@@ -275,9 +278,14 @@ sprint_5_request_8: db-up migrate-if-empty seed-gen queries-head queries-check
 
 # --- MongoDB: документная модель (Sprint 5) ---
 # Учётные данные берутся из окружения контейнера, на хосте пароль в командной строке не светится.
-MONGOSH = docker compose exec -T mongo sh -c 'mongosh --quiet \
-	-u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
-	--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" "$$@"' mongosh
+MONGOSH = docker compose exec -T mongo sh -c '\
+	mongosh --quiet \
+		-u "$$MONGO_INITDB_ROOT_USERNAME" \
+		-p "$$MONGO_INITDB_ROOT_PASSWORD" \
+		--authenticationDatabase admin \
+		"$$MONGO_INITDB_DATABASE" \
+		--file "$$1" \
+' sh
 
 mongo-start:
 	docker compose up -d --wait mongo
@@ -288,6 +296,12 @@ mongo-shell:
 
 mongo-schema:
 	$(MONGOSH) /scripts/mongo/01_schema.js
+mongo-migrate:
+	$(MONGOSH) /scripts/mongo/migrations/001_event_pages_v1_to_v2.js
+mongo-migrate-performers-reviews:
+	$(MONGOSH) /scripts/mongo/migrations/002_add_schema_version_to_performers_reviews.js
+mongo-verify:
+	$(MONGOSH) /scripts/mongo/migrations/001_verify.js
 
 # Seed берёт event_id, снимок событий и покупателей из PostgreSQL (источник истины).
 mongo-seed: mongo-schema
@@ -314,4 +328,4 @@ mongo-check:
 mongo-up: db-up mongo-start migrate-if-empty mongo-seed mongo-queries mongo-check
 	@echo "✅ Готово: PostgreSQL и MongoDB подняты, документы сгенерированы из PG, запросы и проверки прогнаны."
 
-.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-queries mongo-check
+.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check
