@@ -61,6 +61,26 @@ services:
       interval: 5s
       retries: 10
 
+  mongo:
+    image: mongo:7.0
+    container_name: poster-mongo
+    # Документное хранилище контента (Sprint 5, документная модель).
+    # Источник истины по событиям, заказам и билетам остаётся в PostgreSQL.
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-poster}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-poster_content}
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodata:/data/db
+      - ./scripts/mongo:/scripts/mongo:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      retries: 10
+
 volumes:
   pgdata:
   replicadata:
+  mongodata:

@@ -13,3 +13,5 @@ make setup
 # [Спринт 3](docs/sprint-03.md)
 
 # [Спринт 4](docs/sprint-04.md)
+
+# [Спринт 5](docs/sprint-05.md)

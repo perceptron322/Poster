@@ -36,6 +36,20 @@ help:
 	@echo "  make build            — собрать бинарник"
 	@echo "  make print-db-url     — показать текущий DB_URL (без пароля)"
 	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
+	@echo "  make queries-check    — автоматические проверки результатов запросов"
+	@echo ""
+	@echo "MongoDB, документная модель (:27018):"
+	@echo "  make mongo-up         — всё сразу: PG + MongoDB, seed из PG, запросы и проверки"
+	@echo "  make mongo-shell      — mongosh внутри контейнера"
+	@echo "  make mongo-schema     — коллекции, валидаторы \$$jsonSchema, индексы"
+	@echo "  make mongo-migrate    — миграция event_pages V1 -> V2"
+	@echo "  make mongo-migrate-performers-reviews — добавить schemaVersion для performers и reviews"
+	@echo "  make mongo-verify     — проверка версий всех трёх коллекций"
+	@echo "  make mongo-seed       — сгенерировать документы по данным PostgreSQL"
+	@echo "  make mongo-queries    — демо-запросы scripts/mongo/queries/"
+	@echo "  make mongo-check      — проверки модели и сверка PostgreSQL ↔ MongoDB"
+	@echo "  make mongo-start      — только поднять контейнер MongoDB"
+	@echo ""
 	@echo "  make transactions     — выполнить транзакцию возврата билета из scripts/transactions/"
 	@echo "  make backup           — резервная копия БД и ролей в backups/"
 	@echo "  make restore          — восстановить бэкап в чистый PostgreSQL и сверить (file=...)"
@@ -89,7 +103,10 @@ create-roles:
 		-v ON_ERROR_STOP=1 < scripts/security/roles.sql
 
 migrate: check-env
-	@migrate -path migrations -database "$(DB_URL)" up
+	@for f in migrations/*.up.sql; do \
+	  echo "== $$f =="; \
+	  cat "$$f" | docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB); \
+	done
 
 migrate-create:
 	@if [ -z "$(name)" ]; then echo "Использование: make migrate-create name=create_users"; exit 1; fi
@@ -140,6 +157,19 @@ queries:
 	    echo "== $$f =="; \
 	    $(PSQL) < $$f; \
 	done
+
+queries-check:
+	@fail=0; \
+	for f in scripts/query_checks/*.sql; do \
+		echo "== $$f =="; \
+		if $(PSQL) -1 -f "$$f" < /dev/null >/dev/null 2>&1 || \
+		   $(PSQL) -1 < "$$f" >/dev/null 2>&1; then \
+			echo "  ✅ OK"; \
+		else \
+			echo "  ❌ ПРОВАЛ"; fail=1; \
+		fi; \
+	done; \
+	exit $$fail
 
 transactions:
 	$(PSQL) < scripts/transactions/refund_one_ticket.sql
@@ -208,4 +238,94 @@ ha-down:
 ha-clean:
 	@$(HA) clean
 
-.PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean
+seed-clean:
+	$(PSQL) -c 'TRUNCATE tickets, orders, location_bookings, events, locations, users RESTART IDENTITY CASCADE;'
+
+migrate-if-empty: check-env
+	@exists=$$(docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -tAc \
+	  "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='users';"); \
+	if [ "$$exists" = "1" ]; then \
+	  echo "== migrations: таблицы уже есть, пропускаем =="; \
+	else \
+	  $(MAKE) migrate; \
+	fi
+
+seed-vendor:
+	go mod tidy
+	go mod vendor
+
+seed-gen: seed-vendor seed-clean
+	docker run --rm --network poster_default \
+	  -v "$(CURDIR):/src" -w /src/scripts/seed \
+	  -e POSTGRES_HOST=db -e POSTGRES_PORT=5432 \
+	  -e POSTGRES_USER=$(POSTGRES_USER) -e POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
+	  -e POSTGRES_DB=$(POSTGRES_DB) -e POSTGRES_SSLMODE=require \
+	  -e GOFLAGS=-mod=vendor \
+	  golang:1.27 sh -c "go run generate.go -config config.json"
+
+queries-head:
+	@for f in scripts/queries/*.sql; do \
+	    echo "===== $$f ====="; \
+	    docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
+       -v ON_ERROR_STOP=1 -v limit=10 -v offset=0 -P pager=off < $$f 2>&1; \
+	    echo ""; \
+	done
+
+sprint_5_request_8: db-up migrate-if-empty seed-gen queries-head queries-check
+	@echo "✅ Готово: БД поднята, миграции применены, seed сгенерирован, 8 запросов прогнаны."
+
+.PHONY: ha-up ha-status ha-lsn ha-restart ha-rebuild ha-test ha-logs ha-down ha-clean seed-clean
+
+# --- MongoDB: документная модель (Sprint 5) ---
+# Учётные данные берутся из окружения контейнера, на хосте пароль в командной строке не светится.
+MONGOSH = docker compose exec -T mongo sh -c '\
+	mongosh --quiet \
+		-u "$$MONGO_INITDB_ROOT_USERNAME" \
+		-p "$$MONGO_INITDB_ROOT_PASSWORD" \
+		--authenticationDatabase admin \
+		"$$MONGO_INITDB_DATABASE" \
+		--file "$$1" \
+' sh
+
+mongo-start:
+	docker compose up -d --wait mongo
+
+mongo-shell:
+	docker compose exec mongo sh -c 'mongosh -u "$$MONGO_INITDB_ROOT_USERNAME" \
+	  -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin "$$MONGO_INITDB_DATABASE"'
+
+mongo-schema:
+	$(MONGOSH) /scripts/mongo/01_schema.js
+mongo-migrate:
+	$(MONGOSH) /scripts/mongo/migrations/001_event_pages_v1_to_v2.js
+mongo-migrate-performers-reviews:
+	$(MONGOSH) /scripts/mongo/migrations/002_add_schema_version_to_performers_reviews.js
+mongo-verify:
+	$(MONGOSH) /scripts/mongo/migrations/001_verify.js
+
+# Seed берёт event_id, снимок событий и покупателей из PostgreSQL (источник истины).
+mongo-seed: mongo-schema
+	$(PSQL) -tA < scripts/mongo/pg_export.sql | docker compose exec -T mongo sh -c 'cat > /tmp/pg_export.json'
+	$(MONGOSH) /scripts/mongo/02_seed.js
+
+mongo-queries:
+	@for f in scripts/mongo/queries/*.js; do \
+		echo "===== $$f ====="; \
+		$(MONGOSH) "/$$f" || exit 1; \
+		echo ""; \
+	done
+
+mongo-check:
+	@fail=0; \
+	for f in scripts/mongo/checks/*.js; do \
+		echo "== $$f =="; \
+		if $(MONGOSH) "/$$f"; then echo "  ✅ OK"; else echo "  ❌ ПРОВАЛ"; fail=1; fi; \
+	done; \
+	echo "== scripts/mongo/cross_check.sh (PostgreSQL ↔ MongoDB) =="; \
+	if sh scripts/mongo/cross_check.sh; then echo "  ✅ OK"; else echo "  ❌ ПРОВАЛ"; fail=1; fi; \
+	exit $$fail
+
+mongo-up: db-up mongo-start migrate-if-empty mongo-seed mongo-queries mongo-check
+	@echo "✅ Готово: PostgreSQL и MongoDB подняты, документы сгенерированы из PG, запросы и проверки прогнаны."
+
+.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check
