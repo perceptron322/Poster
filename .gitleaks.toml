@@ -23,17 +23,20 @@ path = '''(?i)(\.env[^/]*|\.ya?ml|\.json|\.toml|\.ini|\.properties|\.conf|\.sh|\
   regexTarget = "match"
   regexes = ['''(?i)password_(file|encryption)''']
 
+# ГЛОБАЛЬНЫЙ ALLOWLIST (применяется ко всем правилам)
 [allowlist]
-description = "Плейсхолдеры"
+description = "Плейсхолдеры и файлы-примеры"
 regexTarget = "secret"
 regexes = [
   '''^change_me''',
   '''^\*+$''',
   '''^x+$''',
+  '''(?i)^REDACTED$''', # <-- ДОБАВЛЕНО: Игнорирует слово REDACTED как значение
 ]
 paths = [
   '''frontend/package-lock\.json''',
   '''go\.sum''',
   '''(^|/)node_modules/''',
   '''frontend/(dist|\.angular)/''',
+  '''\.env\.example$''', # <-- ДОБАВЛЕНО: Полностью игнорирует файл .env.example
 ]

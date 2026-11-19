@@ -328,4 +328,13 @@ mongo-check:
 mongo-up: db-up mongo-start migrate-if-empty mongo-seed mongo-queries mongo-check
 	@echo "✅ Готово: PostgreSQL и MongoDB подняты, документы сгенерированы из PG, запросы и проверки прогнаны."
 
+MONGO_URI = mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@$(MONGO_HOST):$(MONGO_PORT)/$(MONGO_DB)?authSource=admin
+
+run-bulk: env
+	@echo "🔄 Проверка и запуск MongoDB (если не запущена)..."
+	@docker compose up -d --wait mongo
+	@echo "✅ MongoDB готова (healthcheck пройден)."
+	@echo "🚀 Запуск пакетной обработки (Bulk API)..."
+	@cd cmd/bulk_test && go run main.go
+
 .PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check
