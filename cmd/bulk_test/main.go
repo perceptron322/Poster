@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -23,8 +24,6 @@ func ProcessReviewsBatch(ctx context.Context, db *mongo.Database, items []Review
 	eventPagesColl := db.Collection("event_pages")
 
 	var reviewModels []mongo.WriteModel
-	var eventModels []mongo.WriteModel
-
 	for _, item := range items {
 		reviewModels = append(reviewModels, mongo.NewInsertOneModel().SetDocument(bson.M{
 			"event_id":      item.EventID,
@@ -35,6 +34,35 @@ func ProcessReviewsBatch(ctx context.Context, db *mongo.Database, items []Review
 			"schemaVersion": 1,
 			"created_at":    time.Now(),
 		}))
+	}
+
+	opts := options.BulkWrite().SetOrdered(false)
+	resReviews, err := reviewsColl.BulkWrite(ctx, reviewModels, opts)
+
+	failedInsertIndices := make(map[int]bool)
+	var batchErr error
+
+	if err != nil {
+		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+			log.Printf("⚠️ Проход 1: Частичные ошибки при вставке отзывов.")
+			for _, writeErr := range bulkErr.WriteErrors {
+				failedInsertIndices[writeErr.Index] = true
+				log.Printf("  ❌ Ошибка в операции #%d (код: %d): %s", writeErr.Index, writeErr.Code, writeErr.Message)
+			}
+			batchErr = fmt.Errorf("частичный сбой вставки: %w", err)
+		} else {
+			return fmt.Errorf("критическая ошибка при вставке отзывов: %w", err)
+		}
+	} else {
+		log.Printf("✅ Проход 1: Успешно вставлено %d отзывов", resReviews.InsertedCount)
+	}
+
+	var eventModels []mongo.WriteModel
+	for i, item := range items {
+
+		if failedInsertIndices[i] {
+			continue
+		}
 
 		eventModels = append(eventModels, mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"_id": item.EventID}).
@@ -45,41 +73,24 @@ func ProcessReviewsBatch(ctx context.Context, db *mongo.Database, items []Review
 			SetUpsert(false))
 	}
 
-	opts := options.BulkWrite().SetOrdered(false)
+	if len(eventModels) > 0 {
+		resEvents, err := eventPagesColl.BulkWrite(ctx, eventModels, opts)
+		if err != nil {
 
-	resReviews, err := reviewsColl.BulkWrite(ctx, reviewModels, opts)
-	if err != nil {
-		handleBulkError(err, resReviews, "отзывы")
-	} else {
-		log.Printf("✅ Отзывы: успешно вставлено %d", resReviews.InsertedCount)
-	}
-
-	resEvents, err := eventPagesColl.BulkWrite(ctx, eventModels, opts)
-	if err != nil {
-		handleBulkError(err, resEvents, "мероприятия")
-	} else {
-		log.Printf("✅ Мероприятия: успешно обновлено %d", resEvents.ModifiedCount)
-	}
-
-	return nil
-}
-
-func handleBulkError(err error, result *mongo.BulkWriteResult, entityName string) {
-	if bulkErr, ok := err.(mongo.BulkWriteException); ok {
-		log.Printf("⚠️ Пакетная обработка '%s' завершена с частичными ошибками. Успешно: %d",
-			entityName, result.InsertedCount+result.ModifiedCount)
-
-		for _, writeErr := range bulkErr.WriteErrors {
-			log.Printf("  ❌ Ошибка в операции #%d (код: %d): %s", writeErr.Index, writeErr.Code, writeErr.Message)
-			if writeErr.Code == 121 {
-				log.Printf("     -> Документ пропущен: нарушение JSON Schema валидации.")
-			} else if writeErr.Code == 11000 {
-				log.Printf("     -> Документ пропущен: дубликат уникального ключа.")
+			if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+				log.Printf("⚠️ Проход 2: Частичные ошибки при обновлении мероприятий.")
+				for _, writeErr := range bulkErr.WriteErrors {
+					log.Printf("  ❌ Ошибка обновления #%d (код: %d): %s", writeErr.Index, writeErr.Code, writeErr.Message)
+				}
+			} else {
+				log.Printf("🔥 Критическая ошибка при обновлении мероприятий: %v", err)
 			}
+		} else {
+			log.Printf("✅ Проход 2: Успешно обновлено счётчиков: %d", resEvents.ModifiedCount)
 		}
-	} else {
-		log.Printf("🔥 Критическая ошибка при обработке '%s': %v", entityName, err)
 	}
+
+	return batchErr
 }
 
 func main() {
@@ -88,10 +99,13 @@ func main() {
 
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
-		log.Fatal("Переменная окружения MONGO_URI не задана")
+
+		mongoURI = "mongodb://poster:<password>@localhost:27018/poster_content?authSource=admin"
+		log.Println("⚠️ Предупреждение: MONGO_URI не задан, используется заглушка. Подключение может не пройти.")
 	}
 
 	clientOptions := options.Client().ApplyURI(mongoURI)
+
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		log.Fatalf("Ошибка подключения к MongoDB: %v", err)
@@ -108,14 +122,15 @@ func main() {
 	batch := []ReviewBatchItem{
 		{EventID: 1, UserID: 101, Rating: 5, Text: "Отличное мероприятие!"},
 		{EventID: 1, UserID: 102, Rating: 4, Text: "Понравилось"},
-		{EventID: 1, UserID: 103, Rating: 10, Text: "Этот отзыв нарушит валидацию схемы, если она настроена"},
+		{EventID: 1, UserID: 103, Rating: 10, Text: "Нарушение валидации схемы"},
 		{EventID: 2, UserID: 104, Rating: 5, Text: "Супер"},
 	}
 
-	log.Println("🚀 Запуск пакетной обработки...")
+	log.Println("🚀 Запуск двухпроходной пакетной обработки...")
 	err = ProcessReviewsBatch(ctx, db, batch)
+
 	if err != nil {
-		log.Printf("Процесс завершился с предупреждениями: %v", err)
+		log.Printf("⚠️ Процесс завершился с ошибками: %v", err)
 	} else {
 		log.Println("🎉 Процесс завершился идеально!")
 	}
