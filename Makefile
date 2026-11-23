@@ -335,6 +335,12 @@ run-bulk: env
 	@docker compose up -d --wait mongo
 	@echo "✅ MongoDB готова (healthcheck пройден)."
 	@echo "🚀 Запуск пакетной обработки (Bulk API)..."
-	@cd cmd/bulk_test && go run main.go
+	@cd cmd/bulk_test && go run .
 
-.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check
+mongo-transaction-demo:
+	@bash scripts/mongo-rs/run-transaction-demo.sh $(if $(SCENARIO),$(SCENARIO),all)
+
+mongo-transaction-server-retry:
+	@bash scripts/mongo-rs/run-server-retry-demo.sh
+
+.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check mongo-transaction-demo mongo-transaction-server-retry

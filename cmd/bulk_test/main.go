@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readconcern"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
 type ReviewBatchItem struct {
@@ -94,7 +98,15 @@ func ProcessReviewsBatch(ctx context.Context, db *mongo.Database, items []Review
 }
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	mode := flag.String("mode", "bulk", "Режим: bulk или transaction")
+	scenario := flag.String("scenario", "all", "Сценарий транзакции: all, success, rollback или retry")
+	flag.Parse()
+
+	timeout := 10 * time.Second
+	if *mode == "transaction" {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	mongoURI := os.Getenv("MONGO_URI")
@@ -105,7 +117,16 @@ func main() {
 	}
 
 	clientOptions := options.Client().ApplyURI(mongoURI)
-
+	if *mode == "transaction" {
+		clientOptions.SetReadConcern(readconcern.Majority())
+		clientOptions.SetWriteConcern(writeconcern.Majority())
+		clientOptions.SetReadPreference(readpref.Primary())
+		if *scenario == "server-retry" {
+			clientOptions.SetAppName("poster-tx-failpoint-test")
+		}
+	} else if *mode != "bulk" {
+		log.Fatalf("Неизвестный режим %q: используйте bulk или transaction", *mode)
+	}
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		log.Fatalf("Ошибка подключения к MongoDB: %v", err)
@@ -117,7 +138,17 @@ func main() {
 	}
 	log.Println("✅ Успешное подключение к MongoDB")
 
-	db := client.Database("poster_content")
+	databaseName := "poster_content"
+	if *mode == "transaction" {
+		databaseName = "poster_tx_demo"
+	}
+	db := client.Database(databaseName)
+	if *mode == "transaction" {
+		if err := RunTransactionDemo(ctx, db, *scenario); err != nil {
+			log.Fatalf("Сценарий транзакции завершился ошибкой: %v", err)
+		}
+		return
+	}
 
 	batch := []ReviewBatchItem{
 		{EventID: 1, UserID: 101, Rating: 5, Text: "Отличное мероприятие!"},
