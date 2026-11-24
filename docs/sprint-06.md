@@ -83,3 +83,27 @@ make mongo-transaction-server-retry
 | `readPreference` | `primary` | Отзыв и рейтинг читаются с актуального Primary; чтение не уходит на отстающий Secondary. Цена — чтения концентрируются на Primary. |
 
 Для транзакций MongoDB используется `primary` read preference. Драйвер задаёт snapshot и majority на параметрах транзакции, а настройки клиента для вне-транзакционных операций — majority/primary.
+
+## 7. Краткий отчёт по настройкам согласованности и отказу узла
+
+- **`readConcern`** — `snapshot` в транзакции даёт согласованный снимок `reviews` для пересчёта `rating.count` и `rating.avg` с учётом вставленного этой же транзакцией отзыва. `majority` при проверочном чтении вне транзакции показывает данные, подтверждённые большинством.
+- **`writeConcern`** — `majority` требует подтверждения коммита как минимум двумя из трёх узлов. Это сохраняет подтверждённый отзыв и обновлённый рейтинг при отказе одного узла. Подтверждение требует репликации и недоступно при потере большинства.
+- **`readPreference`** — `primary` направляет транзакцию и проверочные чтения на текущий Primary. При его отказе драйвер ждёт выбора нового Primary в пределах тайм-аута.
+
+### Проверка режимов чтения
+
+```bash
+make mongo-read-preference-demo
+```
+
+Проверка выполнена на отдельном Replica Set из трёх узлов MongoDB 7.0.45. Тестовый документ `event_pages` записан с `w: majority`. Во всех режимах вне транзакции выполнялся `FindOne` с `readConcern: majority`. Go-драйвер зафиксировал адрес узла, ответившего на запрос. Во всех успешных чтениях получены `rating.count = 2` и `rating.avg = 4`.
+
+| `readPreference` | Все узлы доступны | Secondary `txfault2` выключен | Primary `txfault1` выключен, выборы отложены | После избрания `txfault3` |
+| --- | --- | --- | --- | --- |
+| `primary` | `txfault1` | `txfault1` | Тайм-аут выбора сервера (3 с) | `txfault3` |
+| `primaryPreferred` | `txfault1` | `txfault1` | `txfault3` | `txfault3` |
+| `secondary` | `txfault2` | `txfault3` | `txfault3` | `txfault2` |
+| `secondaryPreferred` | `txfault2` | `txfault3` | `txfault2` | `txfault2` |
+| `nearest` | `txfault3` | `txfault1` | `txfault2` | `txfault2` |
+
+При выключенном `txfault2` дополнительно проверили выбор по тегу `node:txfault2`. `secondary` завершился тайм-аутом, а `secondaryPreferred` прочитал с Primary `txfault1`. Для наблюдения периода без Primary выборы временно отложили через `rs.freeze()` на обеих репликах. После снятия ограничения чтение в режиме `primary` возобновилось без изменения строки подключения. Конкретный узел для `nearest` зависит от измеренной задержки и может отличаться между запусками. [Алгоритм выбора узла MongoDB](https://www.mongodb.com/docs/v7.0/core/read-preference-mechanics/)

@@ -343,4 +343,7 @@ mongo-transaction-demo:
 mongo-transaction-server-retry:
 	@bash scripts/mongo-rs/run-server-retry-demo.sh
 
-.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check mongo-transaction-demo mongo-transaction-server-retry
+mongo-read-preference-demo:
+	@bash scripts/mongo-rs/run-read-preference-demo.sh
+
+.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check mongo-transaction-demo mongo-transaction-server-retry mongo-read-preference-demo
