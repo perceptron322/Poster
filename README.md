@@ -10,6 +10,8 @@
 
 # [Спринт 6](docs/sprint-06.md)
 
+# [Спринт 7](docs/sprint-07.md)
+
 # Poster
 
 Poster — афиша мероприятий с публикацией, покупкой и возвратом билетов. Бэкенд работает на Go, PostgreSQL и MongoDB. [Спецификация OpenAPI](docs/openapi.yaml) · [Архитектура и бизнес-правила](docs/architecture.md)
