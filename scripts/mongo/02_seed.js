@@ -392,7 +392,11 @@ db.performers.insertMany(
 
 db.event_pages.insertMany(pages);
 
-db.reviews.insertMany(reviews);
+if (reviews.length > 0) {
+  db.reviews.insertMany(reviews);
+} else {
+  print('reviews: нет покупателей завершённых мероприятий с оплаченными заказами; коллекция оставлена пустой');
+}
 
 // --------------------------------------------------
 // RECALCULATE RATING CACHE

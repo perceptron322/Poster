@@ -1,0 +1,32 @@
+services:
+  txfault1:
+    image: mongo:7.0
+    command: ["mongod", "--replSet", "txFaultRS", "--bind_ip_all", "--setParameter", "enableTestCommands=1"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes: [tx_fault_rs1:/data/db]
+  txfault2:
+    image: mongo:7.0
+    command: ["mongod", "--replSet", "txFaultRS", "--bind_ip_all", "--setParameter", "enableTestCommands=1"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes: [tx_fault_rs2:/data/db]
+  txfault3:
+    image: mongo:7.0
+    command: ["mongod", "--replSet", "txFaultRS", "--bind_ip_all", "--setParameter", "enableTestCommands=1"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes: [tx_fault_rs3:/data/db]
+volumes:
+  tx_fault_rs1:
+  tx_fault_rs2:
+  tx_fault_rs3:

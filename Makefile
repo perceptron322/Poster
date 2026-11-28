@@ -328,4 +328,22 @@ mongo-check:
 mongo-up: db-up mongo-start migrate-if-empty mongo-seed mongo-queries mongo-check
 	@echo "✅ Готово: PostgreSQL и MongoDB подняты, документы сгенерированы из PG, запросы и проверки прогнаны."
 
-.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check
+MONGO_URI = mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@$(MONGO_HOST):$(MONGO_PORT)/$(MONGO_DB)?authSource=admin
+
+run-bulk: env
+	@echo "🔄 Проверка и запуск MongoDB (если не запущена)..."
+	@docker compose up -d --wait mongo
+	@echo "✅ MongoDB готова (healthcheck пройден)."
+	@echo "🚀 Запуск пакетной обработки (Bulk API)..."
+	@cd cmd/bulk_test && go run .
+
+mongo-transaction-demo:
+	@bash scripts/mongo-rs/run-transaction-demo.sh $(if $(SCENARIO),$(SCENARIO),all)
+
+mongo-transaction-server-retry:
+	@bash scripts/mongo-rs/run-server-retry-demo.sh
+
+mongo-read-preference-demo:
+	@bash scripts/mongo-rs/run-read-preference-demo.sh
+
+.PHONY: mongo-up mongo-start mongo-shell mongo-schema mongo-seed mongo-migrate mongo-migrate-performers-reviews mongo-verify mongo-queries mongo-check mongo-transaction-demo mongo-transaction-server-retry mongo-read-preference-demo

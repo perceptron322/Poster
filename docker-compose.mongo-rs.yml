@@ -1,0 +1,64 @@
+services:
+  mongo-rs1:
+    image: mongo:7.0
+    container_name: poster-mongo-rs1
+    command: ["mongod", "--replSet", "posterRS", "--bind_ip_all"]
+    ports: ["27117:27017"]
+    volumes: [mongo_rs1:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  mongo-rs2:
+    image: mongo:7.0
+    container_name: poster-mongo-rs2
+    command: ["mongod", "--replSet", "posterRS", "--bind_ip_all"]
+    ports: ["27118:27017"]
+    volumes: [mongo_rs2:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  mongo-rs3:
+    image: mongo:7.0
+    container_name: poster-mongo-rs3
+    command: ["mongod", "--replSet", "posterRS", "--bind_ip_all"]
+    ports: ["27119:27017"]
+    volumes: [mongo_rs3:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  mongo-rs-init:
+    image: mongo:7.0
+    depends_on:
+      mongo-rs1:
+        condition: service_healthy
+      mongo-rs2:
+        condition: service_healthy
+      mongo-rs3:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      mongosh --host mongo-rs1:27017 --quiet --eval '
+      try {
+        rs.status();
+        print("Replica Set already initialized");
+      } catch (e) {
+        rs.initiate({
+          _id: "posterRS",
+          members: [
+            {_id: 0, host: "mongo-rs1:27017", priority: 2},
+            {_id: 1, host: "mongo-rs2:27017", priority: 1},
+            {_id: 2, host: "mongo-rs3:27017", priority: 1}
+          ]
+        });
+      }'
+    restart: "no"
+volumes:
+  mongo_rs1:
+  mongo_rs2:
+  mongo_rs3:
