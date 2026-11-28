@@ -143,7 +143,7 @@ func (s *server) editEvent(r request) (any, error) {
 	if err := e.validate(false); err != nil {
 		return nil, err
 	}
-	return transaction(r.Context(), s.db, func(tx *sql.Tx) (event, error) {
+	updated, err := transaction(r.Context(), s.db, func(tx *sql.Tx) (event, error) {
 		ctx := r.Context()
 		if err := lockOwned(r, tx); err != nil {
 			return event{}, err
@@ -177,10 +177,14 @@ func (s *server) editEvent(r request) (any, error) {
 		}
 		return getEvent(ctx, tx, r.id)
 	})
+	if err == nil {
+		s.syncSnapshot(r.Context(), r.id)
+	}
+	return updated, err
 }
 
 func (s *server) cancelEvent(r request) (any, error) {
-	return transaction(r.Context(), s.db, func(tx *sql.Tx) (event, error) {
+	updated, err := transaction(r.Context(), s.db, func(tx *sql.Tx) (event, error) {
 		if err := lockOwned(r, tx); err != nil {
 			return event{}, err
 		}
@@ -196,4 +200,8 @@ func (s *server) cancelEvent(r request) (any, error) {
 		}
 		return getEvent(r.Context(), tx, r.id)
 	})
+	if err == nil {
+		s.syncSnapshot(r.Context(), r.id)
+	}
+	return updated, err
 }

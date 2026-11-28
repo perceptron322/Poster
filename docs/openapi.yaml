@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Poster API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Каталог мероприятий и продажа билетов. Время передаётся в RFC 3339 со смещением.
     Цены и суммы передаются десятичными строками. В ответах всегда два знака после точки.
@@ -15,13 +15,14 @@ tags:
   - name: Учётная запись
   - name: Организатор
   - name: Заказы
+  - name: Контент
   - name: Сервис
 paths:
   /readyz:
     get:
       tags: [Сервис]
       operationId: readiness
-      summary: Проверить соединение с PostgreSQL
+      summary: Проверить соединения с PostgreSQL и MongoDB
       responses:
         '200':
           description: Успешный ответ
@@ -386,6 +387,117 @@ paths:
         '413': {$ref: '#/components/responses/Error413'}
         '415': {$ref: '#/components/responses/Error415'}
         default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/performers:
+    get:
+      tags: [Контент]
+      operationId: listPerformers
+      summary: Справочник исполнителей и трупп
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Performer'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events/{id}/page:
+    get:
+      tags: [Контент]
+      operationId: eventPage
+      summary: Прочитать опубликованную страницу или архив завершённого мероприятия
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+    put:
+      tags: [Контент]
+      operationId: saveEventPage
+      summary: Опубликовать или полностью заменить страницу своего предстоящего мероприятия
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PageInput'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events/{id}/reviews:
+    get:
+      tags: [Контент]
+      operationId: listEventReviews
+      summary: Прочитать отзывы от новых к старым
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Review'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+    post:
+      tags: [Контент]
+      operationId: addEventReview
+      summary: Оставить один отзыв по оплаченному заказу после окончания мероприятия
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewInput'}
+      responses:
+        '201':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Review'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
 components:
   securitySchemes:
     session:
@@ -603,3 +715,144 @@ components:
         tickets:
           type: array
           items: {$ref: '#/components/schemas/Ticket'}
+
+    Performer:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: {type: string, example: perf-0001}
+        name: {type: string}
+        kind: {type: string, enum: [musician, band, dj, speaker, troupe, host]}
+        bio: {type: string}
+        genres: {type: array, items: {type: string}}
+        links:
+          type: object
+          properties:
+            site: {type: string, format: uri}
+            socials: {type: array, items: {type: string, format: uri}}
+        photo: {type: string, format: uri}
+    ReviewInput:
+      type: object
+      additionalProperties: false
+      required: [rating]
+      properties:
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: string, maxLength: 4000}
+    Review:
+      type: object
+      required: [id, event_id, user_id, rating, created_at]
+      properties:
+        id: {type: string, pattern: '^[a-f0-9]{24}$'}
+        event_id: {$ref: '#/components/schemas/ID'}
+        user_id: {$ref: '#/components/schemas/ID'}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: string}
+        created_at: {type: string, format: date-time}
+    PageDetails:
+      description: Форма определяется типом мероприятия в PostgreSQL.
+      oneOf:
+        - type: object
+          title: Концерт
+          required: [genre, age_limit]
+          additionalProperties: false
+          properties:
+            genre: {type: string, minLength: 1, maxLength: 50}
+            age_limit: {type: integer, enum: [0, 6, 12, 16, 18]}
+            setlist_public: {type: boolean}
+        - type: object
+          title: Лекция
+          required: [topic, level]
+          additionalProperties: false
+          properties:
+            topic: {type: string, minLength: 1, maxLength: 100}
+            level: {type: string, enum: [beginner, intermediate, advanced]}
+            materials: {type: array, maxItems: 10, items: {type: string, pattern: '^https://'}}
+        - type: object
+          title: Спектакль
+          required: [troupe_id, acts, age_limit]
+          additionalProperties: false
+          properties:
+            troupe_id: {type: string, maxLength: 20}
+            acts: {type: integer, minimum: 1, maximum: 5}
+            age_limit: {type: integer, enum: [0, 6, 12, 16, 18]}
+        - type: object
+          title: Фестиваль
+          required: [stages]
+          additionalProperties: false
+          properties:
+            stages:
+              type: array
+              minItems: 1
+              maxItems: 10
+              items:
+                type: object
+                required: [name, genre]
+                properties:
+                  name: {type: string, minLength: 1, maxLength: 50}
+                  genre: {type: string, minLength: 1, maxLength: 50}
+        - type: object
+          title: Другое
+          additionalProperties: false
+          properties:
+            note: {type: string, minLength: 1, maxLength: 500}
+    Program:
+      type: array
+      maxItems: 50
+      items:
+        type: object
+        required: [starts_at, title]
+        properties:
+          starts_at: {type: string, format: date-time}
+          title: {type: string, minLength: 1, maxLength: 200}
+          performer_id: {type: string, maxLength: 20}
+          stage: {type: string, maxLength: 50}
+    PerformerIDs:
+      type: array
+      uniqueItems: true
+      maxItems: 30
+      items: {type: string, maxLength: 20}
+    Gallery:
+      type: array
+      maxItems: 20
+      items: {type: string, pattern: '^https://'}
+    PageInput:
+      type: object
+      additionalProperties: false
+      required: [details, program, performer_ids]
+      properties:
+        summary: {type: string, maxLength: 2000}
+        details: {$ref: '#/components/schemas/PageDetails'}
+        program: {$ref: '#/components/schemas/Program'}
+        performer_ids: {$ref: '#/components/schemas/PerformerIDs'}
+        gallery: {$ref: '#/components/schemas/Gallery'}
+      example:
+        summary: Вечер джаза
+        details: {genre: jazz, age_limit: 0}
+        program: []
+        performer_ids: []
+        gallery: []
+    EventPage:
+      type: object
+      required: [event_id, event, summary, details, program, performer_ids, gallery, rating]
+      properties:
+        event_id: {$ref: '#/components/schemas/ID'}
+        event:
+          type: object
+          required: [title, type, status, starts_at, ends_at]
+          properties:
+            title: {type: string}
+            type: {$ref: '#/components/schemas/EventType'}
+            status: {type: string, enum: [published, finished]}
+            starts_at: {type: string, format: date-time}
+            ends_at: {type: string, format: date-time}
+        summary: {type: string}
+        details: {$ref: '#/components/schemas/PageDetails'}
+        program: {$ref: '#/components/schemas/Program'}
+        performer_ids: {$ref: '#/components/schemas/PerformerIDs'}
+        gallery: {$ref: '#/components/schemas/Gallery'}
+        rating:
+          type: object
+          required: [count, avg]
+          properties:
+            count: {type: integer, minimum: 0}
+            avg: {type: number, nullable: true, minimum: 1, maximum: 5}

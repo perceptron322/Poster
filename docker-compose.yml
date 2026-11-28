@@ -71,7 +71,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-poster_content}
     ports:
-      - "27018:27017"
+      - "${MONGO_PORT:-27018}:27017"
     volumes:
       - mongodata:/data/db
       - ./scripts/mongo:/scripts/mongo:ro

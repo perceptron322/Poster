@@ -13,6 +13,8 @@ import (
 	"github.com/perceptron322/poster/internal/api"
 	"github.com/perceptron322/poster/internal/config"
 	"github.com/perceptron322/poster/internal/database"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func main() {
@@ -25,8 +27,18 @@ func main() {
 		log.Fatal("Не удалось настроить подключение к PostgreSQL")
 	}
 	defer db.Close()
+	content, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI).
+		SetServerSelectionTimeout(2 * time.Second).SetTimeout(4 * time.Second))
+	if err != nil {
+		log.Fatal("Не удалось настроить подключение к MongoDB")
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		content.Disconnect(ctx)
+	}()
 	server := &http.Server{
-		Addr: ":" + cfg.ServerPort, Handler: api.New(db, cfg.CookieSecure),
+		Addr: ":" + cfg.ServerPort, Handler: api.New(db, content.Database(cfg.MongoDB), cfg.CookieSecure),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
 		WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second,
 	}

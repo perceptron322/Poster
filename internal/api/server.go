@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -16,12 +17,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/lib/pq"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/perceptron322/poster/docs"
 )
 
 type server struct {
 	db           *sql.DB
+	content      *mongo.Database
 	secureCookie bool
 }
 
@@ -34,8 +37,8 @@ type request struct {
 
 type handler func(request) (any, error)
 
-func New(db *sql.DB, secureCookie bool) http.Handler {
-	s := server{db, secureCookie}
+func New(db *sql.DB, content *mongo.Database, secureCookie bool) http.Handler {
+	s := server{db: db, content: content, secureCookie: secureCookie}
 	mux := http.NewServeMux()
 	docs.Register(mux)
 	route := func(pattern, role string, status int, fn handler) {
@@ -92,6 +95,11 @@ func New(db *sql.DB, secureCookie bool) http.Handler {
 	route("GET "+base+"/me/orders", "user", 200, s.orders)
 	route("GET "+base+"/me/orders/{id}", "user", 200, s.myOrder)
 	route("POST "+base+"/me/orders/{id}/refunds", "user", 200, s.refund)
+	route("GET "+base+"/performers", "", 200, s.performers)
+	route("GET "+base+"/events/{id}/page", "", 200, s.eventPage)
+	route("PUT "+base+"/events/{id}/page", "organizer", 200, s.savePage)
+	route("GET "+base+"/events/{id}/reviews", "", 200, s.reviews)
+	route("POST "+base+"/events/{id}/reviews", "user", 201, s.addReview)
 	protection := http.NewCrossOriginProtection()
 	protection.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeError(w, forbidden) }))
 	return protection.Handler(mux)
@@ -182,7 +190,9 @@ func decode(r request, dst any) error {
 	if len(fields) != 0 {
 		return invalid("Неизвестное поле")
 	}
-	if err := json.Unmarshal(body, dst); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
 		return invalid("Неизвестное поле или неверный тип значения")
 	}
 	return nil
@@ -250,6 +260,9 @@ func (s *server) ready(r request) (any, error) {
 	defer cancel()
 	if err := s.db.PingContext(ctx); err != nil {
 		return nil, &problem{503, "unavailable", "PostgreSQL недоступен"}
+	}
+	if err := s.content.Client().Ping(ctx, nil); err != nil {
+		return nil, mongoUnavailable
 	}
 	return map[string]string{"status": "ok"}, nil
 }

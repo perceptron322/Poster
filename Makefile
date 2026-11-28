@@ -42,7 +42,7 @@ help:
 	@echo "  make create-roles     — создать роли БД (app, analyst, admin)"
 	@echo "  make run              — запустить приложение"
 	@echo "  make build            — собрать бинарник"
-	@echo "  make test-api         — проверить API на отдельном временном PostgreSQL 16"
+	@echo "  make test-api         — проверить API на временных PostgreSQL 16 и MongoDB 7"
 	@echo "  make print-db-url     — показать текущий DB_URL (без пароля)"
 	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
 	@echo "  make queries-check    — автоматические проверки результатов запросов"
@@ -88,6 +88,8 @@ setup: env
 	@command -v migrate >/dev/null || { echo "нужен golang-migrate: https://github.com/golang-migrate/migrate"; exit 1; }
 	$(MAKE) db-up
 	$(MAKE) migrate
+	$(MAKE) mongo-start
+	$(MAKE) mongo-schema
 
 db-up:
 	docker compose up -d --wait db
@@ -331,7 +333,7 @@ mongo-check:
 mongo-up: db-up mongo-start migrate-if-empty mongo-seed mongo-queries mongo-check
 	@echo "✅ Готово: PostgreSQL и MongoDB подняты, документы сгенерированы из PG, запросы и проверки прогнаны."
 
-MONGO_URI = mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@$(MONGO_HOST):$(MONGO_PORT)/$(MONGO_DB)?authSource=admin
+run-bulk: export MONGO_URI ?= mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@$(MONGO_HOST):$(MONGO_PORT)/$(MONGO_DB)?authSource=admin
 
 run-bulk: env
 	@echo "🔄 Проверка и запуск MongoDB (если не запущена)..."
