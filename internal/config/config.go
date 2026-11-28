@@ -2,13 +2,18 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strconv"
 )
 
 type Config struct {
-	ServerPort  string
-	DatabaseURL string
+	ServerPort   string
+	DatabaseURL  string
+	MongoURI     string
+	MongoDB      string
+	CookieSecure bool
 }
 
 func Load() (*Config, error) {
@@ -16,9 +21,16 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	secure, err := strconv.ParseBool(envOr("COOKIE_SECURE", "false"))
+	if err != nil {
+		return nil, fmt.Errorf("COOKIE_SECURE: %w", err)
+	}
 	return &Config{
-		ServerPort:  envOr("SERVER_PORT", "8081"),
-		DatabaseURL: dbURL,
+		CookieSecure: secure,
+		ServerPort:   envOr("SERVER_PORT", "8081"),
+		DatabaseURL:  dbURL,
+		MongoURI:     mongoURI(),
+		MongoDB:      envOr("MONGO_DB", "poster_content"),
 	}, nil
 }
 
@@ -42,6 +54,19 @@ func databaseURL() (string, error) {
 		RawQuery: "sslmode=" + envOr("POSTGRES_SSLMODE", "require"),
 	}
 	return u.String(), nil
+}
+
+func mongoURI() string {
+	if uri := os.Getenv("MONGO_URI"); uri != "" {
+		return uri
+	}
+	u := url.URL{Scheme: "mongodb", Host: net.JoinHostPort(envOr("MONGO_HOST", "localhost"), envOr("MONGO_PORT", "27018"))}
+	if password := os.Getenv("MONGO_PASSWORD"); password != "" {
+		u.User = url.UserPassword(envOr("MONGO_USER", "poster"), password)
+		u.Path = "/"
+		u.RawQuery = "authSource=admin"
+	}
+	return u.String()
 }
 
 func required(key string) (string, error) {

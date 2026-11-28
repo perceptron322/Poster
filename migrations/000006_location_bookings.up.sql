@@ -1,4 +1,4 @@
-CREATE TABLE location_bookings (
+CREATE TABLE IF NOT EXISTS location_bookings (
     booking_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     location_id INT NOT NULL,
     event_id INT NOT NULL UNIQUE,

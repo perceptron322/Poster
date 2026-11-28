@@ -44,3 +44,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
 -- Analyst: read-only access.
 GRANT USAGE ON SCHEMA public TO analyst_user;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO analyst_user;
+-- Исключаем служебные таблицы входа, если миграция API уже применена.
+SELECT format('REVOKE SELECT ON %s FROM analyst_user', rel)
+FROM unnest(ARRAY[to_regclass('public.user_credentials'), to_regclass('public.user_sessions')]) AS rel
+WHERE rel IS NOT NULL\gexec

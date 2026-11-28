@@ -1,0 +1,858 @@
+openapi: 3.0.3
+info:
+  title: Poster API
+  version: 1.1.0
+  description: |
+    Каталог мероприятий и продажа билетов. Время передаётся в RFC 3339 со смещением.
+    Цены и суммы передаются десятичными строками. В ответах всегда два знака после точки.
+    Списки возвращаются массивами, включая пустой результат. Тело запроса ограничено 1 МиБ.
+    Для защищённых запросов в Swagger UI выполните POST /api/v1/auth/login
+    или зарегистрируйтесь. Браузер передаст cookie сессии при следующих запросах.
+servers:
+  - url: /
+tags:
+  - name: Каталог
+  - name: Учётная запись
+  - name: Организатор
+  - name: Заказы
+  - name: Контент
+  - name: Сервис
+paths:
+  /readyz:
+    get:
+      tags: [Сервис]
+      operationId: readiness
+      summary: Проверить соединения с PostgreSQL и MongoDB
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Ready'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/auth/register:
+    post:
+      tags: [Учётная запись]
+      operationId: register
+      summary: Зарегистрировать покупателя и открыть сессию
+      description: |
+        Email приводится к нижнему регистру. Роль организатора назначается вручную.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Registration'}
+      responses:
+        '201':
+          description: Объект создан
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/SessionCookie'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/auth/login:
+    post:
+      tags: [Учётная запись]
+      operationId: login
+      summary: Войти по email и паролю
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Login'}
+      responses:
+        '200':
+          description: Успешный ответ
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/SessionCookie'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/auth/logout:
+    post:
+      tags: [Учётная запись]
+      operationId: logout
+      summary: Завершить текущую сессию
+      security: [{session: []}]
+      responses:
+        '204':
+          description: Сессия завершена
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/SessionCookie'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/me:
+    get:
+      tags: [Учётная запись]
+      operationId: currentUser
+      summary: Получить свой профиль
+      security: [{session: []}]
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Error401'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events:
+    get:
+      tags: [Каталог]
+      operationId: listEvents
+      summary: Найти предстоящие опубликованные мероприятия
+      description: |
+        Сортировка по началу, затем по ID. Поиск по буквальной подстроке названия без учёта регистра. Календарь использует [from, to), карусель — первые результаты.
+      parameters:
+        - {$ref: '#/components/parameters/Search'}
+        - {$ref: '#/components/parameters/Type'}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/Error400'}
+        default: {$ref: '#/components/responses/Unexpected'}
+    post:
+      tags: [Организатор]
+      operationId: createEvent
+      summary: Опубликовать мероприятие и забронировать площадку
+      description: |
+        Только организатор. Начало в будущем. Бронь и мероприятие создаются атомарно.
+      security: [{session: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NewEvent'}
+      responses:
+        '201':
+          description: Объект создан
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events/{id}:
+    get:
+      tags: [Каталог]
+      operationId: getEvent
+      summary: Получить публичную карточку
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '404': {$ref: '#/components/responses/Error404'}
+        default: {$ref: '#/components/responses/Unexpected'}
+    patch:
+      tags: [Организатор]
+      operationId: editEvent
+      summary: Изменить своё предстоящее мероприятие
+      description: |
+        После первой продажи допустимы только description и cover. Неудачный перенос сохраняет исходную бронь.
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventPatch'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events/{id}/cancel:
+    post:
+      tags: [Организатор]
+      operationId: cancelEvent
+      summary: Отменить своё мероприятие до начала
+      description: |
+        Освобождается площадка. Активные заказы и билеты получают статус cancelled. Сумма отменённого заказа равна нулю.
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/me/events:
+    get:
+      tags: [Организатор]
+      operationId: myEvents
+      summary: Получить мероприятия текущего организатора
+      description: |
+        Включает прошедшие и отменённые. Сортировка по началу, затем по ID.
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/locations:
+    get:
+      tags: [Каталог]
+      operationId: listLocations
+      summary: Получить справочник площадок
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Location'}
+        '400': {$ref: '#/components/responses/Error400'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/locations/{id}/bookings:
+    get:
+      tags: [Каталог]
+      operationId: bookings
+      summary: Получить занятые интервалы площадки
+      description: |
+        Выбирает брони, пересекающие интервал [from, to). По умолчанию from — текущее время. Соседние брони могут иметь общую границу.
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Booking'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '404': {$ref: '#/components/responses/Error404'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/orders:
+    post:
+      tags: [Заказы]
+      operationId: purchase
+      summary: Купить от одного до пяти билетов
+      description: |
+        Покупатель или организатор. Цена берётся из мероприятия. Повтор с тем же ключом, мероприятием и количеством возвращает тот же заказ в текущем состоянии. Новый набор параметров с использованным ключом даёт 409.
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Purchase'}
+      responses:
+        '201':
+          description: Объект создан
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/me/orders:
+    get:
+      tags: [Заказы]
+      operationId: myOrders
+      summary: Получить свои заказы с билетами
+      description: |
+        Последние покупки идут первыми. Полностью возвращённые заказы скрыты. Заказы по отменённым мероприятиям видны.
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Order'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/me/orders/{id}:
+    get:
+      tags: [Заказы]
+      operationId: myOrder
+      summary: Получить свой заказ со всей историей билетов
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '404': {$ref: '#/components/responses/Error404'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/me/orders/{id}/refunds:
+    post:
+      tags: [Заказы]
+      operationId: refund
+      summary: Вернуть выбранные билеты своего заказа
+      description: |
+        Все перечисленные билеты должны быть активны и принадлежать заказу. Возврат возможен до начала мероприятия. Если хотя бы один билет недоступен, весь запрос отклоняется. При полном возврате статус заказа становится refunded.
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Refund'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/performers:
+    get:
+      tags: [Контент]
+      operationId: listPerformers
+      summary: Справочник исполнителей и трупп
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Performer'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events/{id}/page:
+    get:
+      tags: [Контент]
+      operationId: eventPage
+      summary: Прочитать опубликованную страницу или архив завершённого мероприятия
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+    put:
+      tags: [Контент]
+      operationId: saveEventPage
+      summary: Опубликовать или полностью заменить страницу своего предстоящего мероприятия
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PageInput'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+  /api/v1/events/{id}/reviews:
+    get:
+      tags: [Контент]
+      operationId: listEventReviews
+      summary: Прочитать отзывы от новых к старым
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Review'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+    post:
+      tags: [Контент]
+      operationId: addEventReview
+      summary: Оставить один отзыв по оплаченному заказу после окончания мероприятия
+      security: [{session: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewInput'}
+      responses:
+        '201':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Review'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        '503': {$ref: '#/components/responses/Error503'}
+        default: {$ref: '#/components/responses/Unexpected'}
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: poster_session
+  headers:
+    SessionCookie:
+      description: HttpOnly, SameSite=Strict, Path=/api/v1. Срок сессии семь дней. При выходе cookie удаляется.
+      schema: {type: string}
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/ID'}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Offset:
+      name: offset
+      in: query
+      schema: {type: integer, minimum: 0, maximum: 2147483647, default: 0}
+    Search:
+      name: q
+      in: query
+      schema: {type: string}
+    Type:
+      name: type
+      in: query
+      schema: {$ref: '#/components/schemas/EventType'}
+    From:
+      name: from
+      in: query
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      description: Исключающая верхняя граница.
+      schema: {type: string, format: date-time}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Клиент создаёт ключ на одну покупку и повторяет его при сетевом сбое.
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+  responses:
+    Error400:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error401:
+      description: Требуется вход или неверны учётные данные
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error403:
+      description: Доступ запрещён
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error404:
+      description: Объект не найден или заказ принадлежит другому пользователю
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error409:
+      description: Конфликт с текущим состоянием
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error413:
+      description: Тело больше 1 МиБ
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error415:
+      description: Требуется application/json
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Error503:
+      description: База данных недоступна
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unexpected:
+      description: Ошибка сервера
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    ID: {type: integer, format: int32, minimum: 1, maximum: 2147483647}
+    EventType: {type: string, enum: [concert, lecture, theatre, festival, other]}
+    Money: {type: string, pattern: '^[0-9]+\.[0-9]{2}$', example: '250.00'}
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string, example: booking_conflict}
+        message: {type: string, example: Площадка занята в выбранное время}
+    Ready:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ok]}
+    Registration:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        email: {type: string, format: email, maxLength: 255}
+        password: {type: string, format: password, writeOnly: true, description: От 8 до 1024 байт UTF-8.}
+    Login:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: {type: string, format: email}
+        password: {type: string, format: password, writeOnly: true}
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        name: {type: string}
+        email: {type: string, format: email}
+        role: {type: string, enum: [guest, customer, organizer]}
+    Location:
+      type: object
+      required: [id, name, address, capacity]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        name: {type: string}
+        address: {type: string}
+        capacity: {type: integer, minimum: 1}
+    Booking:
+      type: object
+      required: [event_id, start, end]
+      properties:
+        event_id: {$ref: '#/components/schemas/ID'}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+    EventPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        title: {type: string, minLength: 1, maxLength: 300}
+        description: {type: string, minLength: 1}
+        cover: {type: string, format: uri, pattern: '^https?://', maxLength: 500}
+        starts_at: {type: string, format: date-time}
+        duration_minutes: {type: integer, minimum: 1, maximum: 2147483647}
+        type: {$ref: '#/components/schemas/EventType'}
+        ticket_price: {type: string, pattern: '^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$', description: Положительная цена., example: '250.00'}
+        location_id: {$ref: '#/components/schemas/ID'}
+    NewEvent:
+      allOf:
+        - {$ref: '#/components/schemas/EventPatch'}
+        - type: object
+          required: [title, description, cover, starts_at, duration_minutes, type, ticket_price, location_id]
+    Event:
+      type: object
+      required: [id, title, description, cover, starts_at, duration_minutes, type, ticket_price, status, organizer_id, organizer_name, location, available]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        title: {type: string}
+        description: {type: string}
+        cover: {type: string}
+        starts_at: {type: string, format: date-time}
+        duration_minutes: {type: number, description: Существующие события могут иметь дробную длительность в минутах.}
+        type: {$ref: '#/components/schemas/EventType'}
+        ticket_price: {$ref: '#/components/schemas/Money'}
+        status: {type: string, enum: [published, cancelled, finished]}
+        organizer_id: {$ref: '#/components/schemas/ID'}
+        organizer_name: {type: string}
+        location: {$ref: '#/components/schemas/Location'}
+        available: {type: integer, minimum: 0}
+    Purchase:
+      type: object
+      additionalProperties: false
+      required: [event_id, quantity]
+      properties:
+        event_id: {$ref: '#/components/schemas/ID'}
+        quantity: {type: integer, minimum: 1, maximum: 5}
+    Refund:
+      type: object
+      additionalProperties: false
+      required: [ticket_ids]
+      properties:
+        ticket_ids:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          items: {$ref: '#/components/schemas/ID'}
+    Ticket:
+      type: object
+      required: [id, price, status]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        price: {$ref: '#/components/schemas/Money'}
+        status: {type: string, enum: [valid, used, returned, cancelled]}
+    Order:
+      type: object
+      required: [id, event_id, event_title, created_at, status, total_price, tickets]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        event_id: {$ref: '#/components/schemas/ID'}
+        event_title: {type: string}
+        created_at: {type: string, format: date-time}
+        status: {type: string, enum: [pending, paid, refunded, cancelled]}
+        total_price: {$ref: '#/components/schemas/Money'}
+        tickets:
+          type: array
+          items: {$ref: '#/components/schemas/Ticket'}
+
+    Performer:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: {type: string, example: perf-0001}
+        name: {type: string}
+        kind: {type: string, enum: [musician, band, dj, speaker, troupe, host]}
+        bio: {type: string}
+        genres: {type: array, items: {type: string}}
+        links:
+          type: object
+          properties:
+            site: {type: string, format: uri}
+            socials: {type: array, items: {type: string, format: uri}}
+        photo: {type: string, format: uri}
+    ReviewInput:
+      type: object
+      additionalProperties: false
+      required: [rating]
+      properties:
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: string, maxLength: 4000}
+    Review:
+      type: object
+      required: [id, event_id, user_id, rating, created_at]
+      properties:
+        id: {type: string, pattern: '^[a-f0-9]{24}$'}
+        event_id: {$ref: '#/components/schemas/ID'}
+        user_id: {$ref: '#/components/schemas/ID'}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: string}
+        created_at: {type: string, format: date-time}
+    PageDetails:
+      description: Форма определяется типом мероприятия в PostgreSQL.
+      oneOf:
+        - type: object
+          title: Концерт
+          required: [genre, age_limit]
+          additionalProperties: false
+          properties:
+            genre: {type: string, minLength: 1, maxLength: 50}
+            age_limit: {type: integer, enum: [0, 6, 12, 16, 18]}
+            setlist_public: {type: boolean}
+        - type: object
+          title: Лекция
+          required: [topic, level]
+          additionalProperties: false
+          properties:
+            topic: {type: string, minLength: 1, maxLength: 100}
+            level: {type: string, enum: [beginner, intermediate, advanced]}
+            materials: {type: array, maxItems: 10, items: {type: string, pattern: '^https://'}}
+        - type: object
+          title: Спектакль
+          required: [troupe_id, acts, age_limit]
+          additionalProperties: false
+          properties:
+            troupe_id: {type: string, maxLength: 20}
+            acts: {type: integer, minimum: 1, maximum: 5}
+            age_limit: {type: integer, enum: [0, 6, 12, 16, 18]}
+        - type: object
+          title: Фестиваль
+          required: [stages]
+          additionalProperties: false
+          properties:
+            stages:
+              type: array
+              minItems: 1
+              maxItems: 10
+              items:
+                type: object
+                required: [name, genre]
+                properties:
+                  name: {type: string, minLength: 1, maxLength: 50}
+                  genre: {type: string, minLength: 1, maxLength: 50}
+        - type: object
+          title: Другое
+          additionalProperties: false
+          properties:
+            note: {type: string, minLength: 1, maxLength: 500}
+    Program:
+      type: array
+      maxItems: 50
+      items:
+        type: object
+        required: [starts_at, title]
+        properties:
+          starts_at: {type: string, format: date-time}
+          title: {type: string, minLength: 1, maxLength: 200}
+          performer_id: {type: string, maxLength: 20}
+          stage: {type: string, maxLength: 50}
+    PerformerIDs:
+      type: array
+      uniqueItems: true
+      maxItems: 30
+      items: {type: string, maxLength: 20}
+    Gallery:
+      type: array
+      maxItems: 20
+      items: {type: string, pattern: '^https://'}
+    PageInput:
+      type: object
+      additionalProperties: false
+      required: [details, program, performer_ids]
+      properties:
+        summary: {type: string, maxLength: 2000}
+        details: {$ref: '#/components/schemas/PageDetails'}
+        program: {$ref: '#/components/schemas/Program'}
+        performer_ids: {$ref: '#/components/schemas/PerformerIDs'}
+        gallery: {$ref: '#/components/schemas/Gallery'}
+      example:
+        summary: Вечер джаза
+        details: {genre: jazz, age_limit: 0}
+        program: []
+        performer_ids: []
+        gallery: []
+    EventPage:
+      type: object
+      required: [event_id, event, summary, details, program, performer_ids, gallery, rating]
+      properties:
+        event_id: {$ref: '#/components/schemas/ID'}
+        event:
+          type: object
+          required: [title, type, status, starts_at, ends_at]
+          properties:
+            title: {type: string}
+            type: {$ref: '#/components/schemas/EventType'}
+            status: {type: string, enum: [published, finished]}
+            starts_at: {type: string, format: date-time}
+            ends_at: {type: string, format: date-time}
+        summary: {type: string}
+        details: {$ref: '#/components/schemas/PageDetails'}
+        program: {$ref: '#/components/schemas/Program'}
+        performer_ids: {$ref: '#/components/schemas/PerformerIDs'}
+        gallery: {$ref: '#/components/schemas/Gallery'}
+        rating:
+          type: object
+          required: [count, avg]
+          properties:
+            count: {type: integer, minimum: 0}
+            avg: {type: number, nullable: true, minimum: 1, maximum: 5}

@@ -6,9 +6,11 @@
 -- по скалярным типам (int) в паре с range-типом.
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
-ALTER TABLE location_bookings
-  ADD CONSTRAINT ex_bookings_no_overlap
-  EXCLUDE USING GIST (
-    location_id WITH =,
-    tstzrange(start_time, end_time) WITH &&
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_constraint
+                 WHERE conrelid = 'location_bookings'::regclass AND conname = 'ex_bookings_no_overlap') THEN
+    ALTER TABLE location_bookings ADD CONSTRAINT ex_bookings_no_overlap
+      EXCLUDE USING GIST (location_id WITH =, tstzrange(start_time, end_time) WITH &&);
+  END IF;
+END $$;
