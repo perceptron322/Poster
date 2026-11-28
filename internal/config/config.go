@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 )
 
 type Config struct {
-	ServerPort  string
-	DatabaseURL string
+	ServerPort   string
+	DatabaseURL  string
+	CookieSecure bool
 }
 
 func Load() (*Config, error) {
@@ -16,9 +18,14 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	secure, err := strconv.ParseBool(envOr("COOKIE_SECURE", "false"))
+	if err != nil {
+		return nil, fmt.Errorf("COOKIE_SECURE: %w", err)
+	}
 	return &Config{
-		ServerPort:  envOr("SERVER_PORT", "8081"),
-		DatabaseURL: dbURL,
+		CookieSecure: secure,
+		ServerPort:   envOr("SERVER_PORT", "8081"),
+		DatabaseURL:  dbURL,
 	}, nil
 }
 

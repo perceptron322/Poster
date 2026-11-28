@@ -9,7 +9,15 @@ POSTGRES_DB       ?= poster
 POSTGRES_USER     ?= poster
 POSTGRES_SSLMODE  ?= require
 
-DB_URL ?= $(if $(DATABASE_URL),$(DATABASE_URL),postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=$(POSTGRES_SSLMODE))
+ifeq ($(origin DB_URL),undefined)
+DB_URL = $(if $(DATABASE_URL),$(DATABASE_URL),postgres://$(POSTGRES_USER)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=$(POSTGRES_SSLMODE))
+
+# Recompute the default URL in recursive make after "setup" creates .env.
+unexport DB_URL
+endif
+
+migrate migrate-version: export PGPASSWORD = $(POSTGRES_PASSWORD)
+migrate migrate-version print-db-url: export POSTER_MIGRATION_URL = $(DB_URL)
 
 .DEFAULT_GOAL := help
 
@@ -34,6 +42,7 @@ help:
 	@echo "  make create-roles     — создать роли БД (app, analyst, admin)"
 	@echo "  make run              — запустить приложение"
 	@echo "  make build            — собрать бинарник"
+	@echo "  make test-api         — проверить API на отдельном временном PostgreSQL 16"
 	@echo "  make print-db-url     — показать текущий DB_URL (без пароля)"
 	@echo "  make queries          — выполнить пять бизнес-запросов из scripts/queries/"
 	@echo "  make queries-check    — автоматические проверки результатов запросов"
@@ -103,31 +112,32 @@ create-roles:
 		-v ON_ERROR_STOP=1 < scripts/security/roles.sql
 
 migrate: check-env
-	@for f in migrations/*.up.sql; do \
-	  echo "== $$f =="; \
-	  cat "$$f" | docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB); \
-	done
+	@migrate -path migrations -database "$$POSTER_MIGRATION_URL" up
 
 migrate-create:
 	@if [ -z "$(name)" ]; then echo "Использование: make migrate-create name=create_users"; exit 1; fi
 	migrate create -ext sql -dir migrations -seq $(name)
 
 migrate-version: check-env
-	@migrate -path migrations -database "$(DB_URL)" version
+	@migrate -path migrations -database "$$POSTER_MIGRATION_URL" version
 
 reset:
 	docker compose down -v
 	$(MAKE) db-up
 	$(MAKE) migrate
 
+.PHONY: test-api
+test-api: build
+	python3 scripts/test-api.py
+
 run:
-	go run cmd/api/main.go
+	go run ./cmd/api
 
 build:
-	go build -o bin/api cmd/api/main.go
+	go build -o bin/api ./cmd/api
 
 print-db-url:
-	@echo '$(DB_URL)' | sed -E 's#(://[^:/]+:)[^@]+@#\1****@#'
+	@echo "$$POSTER_MIGRATION_URL" | sed -E 's#(://[^:/]+:)[^@]+@#\1****@#'
 
 PSQL = docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -v ON_ERROR_STOP=1
 
@@ -241,14 +251,7 @@ ha-clean:
 seed-clean:
 	$(PSQL) -c 'TRUNCATE tickets, orders, location_bookings, events, locations, users RESTART IDENTITY CASCADE;'
 
-migrate-if-empty: check-env
-	@exists=$$(docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -tAc \
-	  "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='users';"); \
-	if [ "$$exists" = "1" ]; then \
-	  echo "== migrations: таблицы уже есть, пропускаем =="; \
-	else \
-	  $(MAKE) migrate; \
-	fi
+migrate-if-empty: migrate
 
 seed-vendor:
 	go mod tidy
